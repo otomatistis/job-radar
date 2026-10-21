@@ -1,490 +1,351 @@
-# JOB RADAR — konfigurasi sesuai CV, 21 Oktober 2026
-# Perubahan aturan yang bergantung pada negara ditangani oleh job_watch.py versi baru.
-# Edit daftar searches dengan hati-hati: tiap baris menambah durasi workflow.
-# Negara Edinburgh tercakup sebagai kota di United Kingdom.
-# Tidak ada Gemini. Lowongan tanpa gaji/sponsorship tidak otomatis ditolak.
+# ╔════════════════════════════════════════════════════════════════╗
+# ║  JOB RADAR — satu-satunya file yang kamu edit                  ║
+# ║  github.com → buka file ini → ikon pensil → Commit.            ║
+# ║  Run berikutnya otomatis pakai isi terbaru.                    ║
+# ╚════════════════════════════════════════════════════════════════╝
+#
+# ATURAN MENULIS
+#   • Tidak peka huruf besar/kecil. Cocok per KATA UTUH: "tax" tidak cocok dengan "taxonomy".
+#   • Tanda * = akhiran bebas: "sponsor*" cocok sponsor/sponsors/sponsorship.
+#   • Frasa boleh: "right to work". Daftar kosong [] = fitur itu mati.
+#   • Pakai SPASI (bukan tab). Jangan hapus tanda "-", "[ ]", atau kutip.
+#   • Salah format? Radar kirim pesan "config.yml rusak" ke Telegram, tidak diam-diam gagal.
 
-sites:
-- indeed
-country_indeed: ireland
-hours_old: 36
-search_rotation_groups: 4  # 35 pencarian dibagi 4 run, sekitar 9 tiap 6 jam
-results_per_search: 15
-searches:
-- term: operations associate
-  location: Jakarta, Indonesia
-  country: indonesia
-- term: business operations
-  location: Indonesia
-  country: indonesia
-- term: management trainee operations
-  location: Indonesia
-  country: indonesia
-- term: production planning
-  location: Indonesia
-  country: indonesia
-- term: project officer
-  location: Indonesia
-  country: indonesia
-- term: operations associate
-  location: Malaysia
-  country: malaysia
-- term: business support
-  location: Kuala Lumpur, Malaysia
-  country: malaysia
-- term: production coordinator
-  location: Malaysia
-  country: malaysia
-- term: graduate programme operations
-  location: Ireland
-  country: ireland
-- term: operations coordinator
-  location: Ireland
-  country: ireland
-- term: project support officer
-  location: Ireland
-  country: ireland
-- term: business operations associate
-  location: Ireland
-  country: ireland
-- term: production planner
-  location: Ireland
-  country: ireland
-- term: operations associate
-  location: United Kingdom
-  country: uk
-- term: project officer
-  location: United Kingdom
-  country: uk
-- term: business support
-  location: Edinburgh, United Kingdom
-  country: uk
-- term: operations coordinator
-  location: Netherlands
-  country: netherlands
-- term: business operations
-  location: Germany
-  country: germany
-- term: project support
-  location: Switzerland
-  country: switzerland
-- term: operations associate
-  location: Italy
-  country: italy
-- term: operations associate
-  location: Spain
-  country: spain
-- term: operations associate
-  location: Sweden
-  country: sweden
-- term: operations associate
-  location: Denmark
-  country: denmark
-- term: operations associate
-  location: Norway
-  country: norway
-- term: operations associate
-  location: Greece
-  country: greece
-- term: operations associate
-  location: Iceland
-  country: iceland
-- term: operations associate
-  location: Australia
-  country: australia
-- term: production coordinator
-  location: Australia
-  country: australia
-- term: operations associate
-  location: New Zealand
-  country: new zealand
-- term: operations coordinator
-  location: Saudi Arabia
-  country: saudi arabia
-- term: operations associate
-  location: Qatar
-  country: qatar
-- term: business support
-  location: Kuwait
-  country: kuwait
-- term: AI data evaluator remote worldwide
-  location: Remote
-  country: usa
-- term: AI quality reviewer remote worldwide
-  location: Remote
-  country: usa
-- term: business operations remote worldwide
-  location: Remote
-  country: usa
+
+# ═════════ 1. SUMBER & WAKTU ═════════
+sites: [indeed]               # indeed paling stabil dari server GitHub. linkedin sering diblok -> tambahkan sendiri kalau mau.
+hours_old: 14                 # ambil job yang diposting dalam N jam terakhir. Harus > jarak antar run (6 jam) supaya tidak ada yang lolos.
+results_per_search: 40        # maks hasil per pencarian
+max_search_minutes: 11        # BATAS waktu pencarian per run. Menjaga jatah 2.000 menit GitHub tidak habis.
+                              # Pencarian yang belum sempat jalan dilanjutkan di run berikutnya (dirotasi otomatis).
+
+
+# ═════════ 2. NEGARA TARGET ═════════
+# sponsor:  required  = butuh sponsor. Job "no sponsorship" / "wajib punya izin kerja sendiri" DIBUANG. Tanpa penyebutan = tetap lolos (skor lebih rendah).
+#           preferred = tidak wajib, tapi sponsor jadi nilai plus
+#           none      = visa tidak relevan
+# remote_ok: true = job remote di negara ini selalu boleh (tanpa syarat worldwide/sponsor)
+# min_salary: gaji minimum per bulan. Job tanpa info gaji TETAP lolos.
+# tokens: nama kota/wilayah untuk mendeteksi negara dari lokasi job
+# indeed: nama negara untuk Indeed. Dihapus = negara tidak dicari di Indeed (tetap diterima dari company langsung)
+countries:
+  indonesia:
+    indeed: indonesia
+    location: Indonesia
+    sponsor: none
+    remote_ok: true
+    min_salary: { amount: 9000000, currency: IDR }
+    tokens: [jakarta, bandung, surabaya, bali, tangerang, bekasi, depok, bogor, semarang, yogyakarta, medan, batam, cikarang, banten, "jawa barat", "jawa timur", "jawa tengah"]
+    extra_queries:
+      - '("management trainee" OR "officer development program" OR "management development program" OR "future leaders program" OR "staff operasional" OR "koordinator operasional" OR "project officer")'
+  malaysia:
+    indeed: malaysia
+    location: Malaysia
+    sponsor: required
+    remote_ok: true
+    min_salary: { amount: 5000, currency: MYR }
+    tokens: ["kuala lumpur", selangor, penang, johor, "petaling jaya", cyberjaya, putrajaya, "shah alam"]
+  ireland:
+    indeed: ireland
+    location: Ireland
+    sponsor: preferred
+    remote_ok: true
+    tokens: [dublin, cork, galway, limerick, waterford, kilkenny, athlone, drogheda, dundalk, sligo, ie]
+    extra_queries:
+      - '("graduate programme" OR "graduate program" OR "graduate scheme" OR "production operative")'
+  uk:
+    indeed: uk
+    location: United Kingdom
+    sponsor: required
+    tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb]
+  switzerland:
+    indeed: switzerland
+    location: Switzerland
+    sponsor: required
+    tokens: [swiss, zurich, zürich, geneva, basel, bern, lausanne, zug]
+  netherlands:
+    indeed: netherlands
+    location: Netherlands
+    sponsor: required
+    tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven]
+  spain:
+    indeed: spain
+    location: Spain
+    sponsor: required
+    tokens: [madrid, barcelona, valencia, seville, malaga]
+  italy:
+    indeed: italy
+    location: Italy
+    sponsor: required
+    tokens: [milan, rome, turin, bologna, florence, naples]
+  norway:
+    indeed: norway
+    location: Norway
+    sponsor: required
+    tokens: [oslo, bergen, trondheim, stavanger]
+  sweden:
+    indeed: sweden
+    location: Sweden
+    sponsor: required
+    tokens: [stockholm, gothenburg, malmö, malmo, uppsala]
+  denmark:
+    indeed: denmark
+    location: Denmark
+    sponsor: required
+    tokens: [copenhagen, aarhus, odense]
+  germany:
+    indeed: germany
+    location: Germany
+    sponsor: required
+    tokens: [deutschland, berlin, munich, münchen, hamburg, frankfurt, cologne, köln, stuttgart, düsseldorf, dusseldorf]
+  greece:
+    indeed: greece
+    location: Greece
+    sponsor: required
+    tokens: [athens, thessaloniki]
+  iceland:                      # Indeed tidak mendukung Iceland -> hanya terbaca lewat company langsung
+    sponsor: required
+    tokens: [reykjavik, reykjavík]
+  australia:
+    indeed: australia
+    location: Australia
+    sponsor: required
+    tokens: [sydney, melbourne, brisbane, perth, adelaide, canberra]
+  new_zealand:
+    indeed: new zealand
+    location: New Zealand
+    sponsor: required
+    tokens: ["new zealand", auckland, wellington, christchurch]
+  saudi_arabia:
+    indeed: saudi arabia
+    location: Saudi Arabia
+    sponsor: required
+    tokens: ["saudi arabia", ksa, riyadh, jeddah, dammam, "al khobar", neom]
+  qatar:
+    indeed: qatar
+    location: Qatar
+    sponsor: required
+    tokens: [doha]
+  kuwait:
+    indeed: kuwait
+    location: Kuwait
+    sponsor: required
+    tokens: ["kuwait city"]
+
+# Job di negara ini langsung dibuang (supaya "Dublin, OH, USA" tidak dikira Dublin Irlandia)
+other_countries: ["united states", usa, "u.s.", america, canada, india, brazil, mexico, france, belgium, austria, poland, portugal, finland, singapore, china, japan, philippines, thailand, vietnam, uae, "united arab emirates", dubai, "abu dhabi", turkey, israel, egypt, pakistan, nigeria, "south africa", argentina, chile, colombia]
+
+
+# ═════════ 3. PENCARIAN ROLE (dipasangkan otomatis dengan SETIAP negara di atas) ═════════
+# Sintaks Indeed: "frasa persis", OR, tanda minus (-kata) untuk mengecualikan.
+# 4 query x ~18 negara = ~72 pencarian, dirotasi dalam budget waktu.
+role_queries:
+  - '("operations coordinator" OR "operations associate" OR "operations specialist" OR "operations analyst" OR "operations officer" OR "operations assistant" OR "business operations" OR "business support" OR "business associate")'
+  - '("project officer" OR "project associate" OR "project support" OR "project coordinator" OR "production planner" OR "production planning" OR "production coordinator" OR "supply chain coordinator" OR "supply chain analyst" OR "quality coordinator" OR "inventory coordinator")'
+  - '("business development" OR "market research" OR "market entry" OR "market access" OR "international strategy" OR "global strategy" OR "global operations" OR "international operations" OR "sustainability coordinator" OR "virtual assistant")'
+  - '("AI operations" OR "AI project coordinator" OR "AI data specialist" OR "AI quality" OR "data annotation" OR "LLM evaluation" OR "AI trainer" OR "AI program coordinator")'
+
+# Pencarian tambahan manual (opsional). Contoh remote worldwide lewat LinkedIn:
+# extra_searches:
+#   - { term: "operations coordinator", location: "Worldwide", remote: true, sites: [linkedin] }
+extra_searches: []
+
+
+# ═════════ 4. CAREER PAGE COMPANY LANGSUNG (API resmi, bukan scraping) ═════════
+# Cara cari slug: Actions -> job-radar -> Run workflow -> mode "find-companies" -> isi nama company (pisah koma).
+# Hasilnya dikirim ke Telegram. Tempel slug yang ketemu ke daftar di bawah. Muat ~15-20 nama per run.
+# Filter negara/bahasa/sponsor/gaji di bawah berlaku juga untuk job dari company.
 companies:
-  enabled: false
+  enabled: true
   max_age_days: 14
-  title_any:
-  - operation
-  - project
-  - business
-  - production
-  - manufactur
-  - planning
-  - quality
-  - inventory
-  - horticultur
-  - agricultur
-  - market access
-  - research
-  - ai data
-  - evaluator
-  - coordinator
-  - support
-  - associate
-  - graduate
-  - trainee
-  location_any: []
-  location_exclude_any: []
-  greenhouse: []
+  title_any: [operation, operat, coordinator, associate, officer, assistant, analyst, specialist, support, project, programme, program, business, strategy, market, sustainab, supply, logistic, production, planner, planning, quality, procure, consult, development, trainee, graduate, administrator]
+  greenhouse: []              # contoh: [intercom, workhuman]
   lever: []
   ashby: []
+
+
+# ═════════ 5. FILTER KERAS (gagal satu = langsung dibuang) ═════════
 filters:
-  include_any: []
-  include_all: []
-  exclude_any:
-  - volunteer
-  - voluntary position
-  - unpaid internship
-  - commission only
-  - commission-only
+  include_any: []             # opsional: job HARUS punya salah satu kata ini. Kosong = tidak ada syarat.
+  job_types_allowed: [fulltime, contract]   # part-time, internship, temporary otomatis dibuang
+  max_years_required: 4       # job yang minta pengalaman > N tahun dibuang ("3-5 years" dihitung 3; "5+ years" dibuang)
+  require_english_description: true   # deskripsi berbahasa Jerman/Belanda/Prancis/dll dianggap wajib bahasa lokal -> dibuang. Inggris & Indonesia lolos.
+
+  # Dibuang bila bahasa ini DIWAJIBKAN ("fluent German", "German-speaking"). "German is a plus/desirable" tetap lolos.
+  blocked_languages: [german, deutsch, dutch, flemish, french, italian, spanish, portuguese, norwegian, swedish, danish, finnish, greek, icelandic, arabic, mandarin, chinese, cantonese, japanese, korean, thai, vietnamese, russian, polish, turkish, hindi, tamil, gaeilge, "irish language"]
+
+  # Judul yang dibuang: senior/direktur, teknis murni, magang, part-time, dll.
   title_exclude_any:
-  - volunteer
-  - internship
-  - intern
-  - voluntary
-  - unpaid
-  - apprentice
+    - director*
+    - head of
+    - vp
+    - vice president
+    - chief
+    - principal
+    - general manager
+    - managing director
+    - senior
+    - sr.
+    - sr
+    - intern
+    - interns
+    - internship*
+    - apprentice*
+    - volunteer*
+    - unpaid
+    - part time
+    - part-time
+    - placement*
+    - work experience
+    - working student
+    - werkstudent
+    - praktikum
+    - summer
+    - co-op
+    - engineer*
+    - developer*
+    - programmer*
+    - devops
+    - data scientist
+    - scientist*
+    - machine learning
+    - mlops
+    - software
+    - full stack
+    - full-stack
+    - backend
+    - frontend
+    - architect*
+    - nurse*
+    - doctor*
+    - physician*
+    - pharmacist*
+    - dentist*
+    - accountant*
+    - auditor*
+    - paralegal*
+    - driver*
+    - chef*
+    - cook*
+    - cleaner*
+    - welder*
+    - electrician*
+    - mechanic*
+    - security guard
+
+  # Frasa di deskripsi yang membuang job (frasa spesifik, supaya "unpaid leave" / "volunteer days" sebagai benefit tidak ikut kena)
+  exclude_any:
+    - voluntary position
+    - voluntary role
+    - volunteer position
+    - volunteer role
+    - volunteer opportunity
+    - unpaid position
+    - unpaid role
+    - unpaid internship
+    - unpaid work
+    - unpaid trial
+    - this is an unpaid
+
+  # SIM / kendaraan sendiri: dibuang KECUALI disebut desirable / nice to have / preferred / a plus
+  exclude_unless_soft:
+    - driving licen*
+    - driver's licen*
+    - drivers licen*
+    - driver licen*
+    - clean licen*
+    - own transport*
+    - own vehicle
+    - own car
+    - reliable transport*
+    - car owner
+    - sim a
+    - sim c
+    - kendaraan pribadi
+    - kendaraan sendiri
+    - motor sendiri
+
+  # Istilah yang hanya berlaku di negara tertentu (di negara lain dibuang)
+  country_only_title_terms:
+    - terms: [graduate programme, graduate program, graduate scheme, graduate trainee, graduate development programme, graduate rotation, graduate leadership programme, early careers programme]
+      only_in: [ireland]
+    - terms: [management trainee, mt program, officer development program, management development program, future leaders program, management associate program]
+      only_in: [indonesia]
+
+  # Pembatas AI: kalau judulnya "AI" tapi deskripsinya penuh stack teknis (> technical_max kata ini), dibuang.
+  technical_max: 1
+  technical_terms: [pytorch, tensorflow, "deep learning", kubernetes, docker, "ci/cd", "software development", backend, mlops, "fine-tuning", "model training", "scikit-learn", "neural network*", "computer science degree", "software engineering"]
+
+
+# ═════════ 6. SPONSOR & WORK PERMIT ═════════
+# Di negara dengan sponsor: required -> job yang cocok "negative" dibuang; job yang minta izin kerja sendiri ("work_auth")
+# tanpa menyebut sponsor juga dibuang. "positive" memberi nilai plus.
+sponsorship:
+  positive: ["visa sponsorship", "sponsorship available", "sponsorship is available", "sponsorship provided", "we sponsor", "will sponsor", "can sponsor", "able to sponsor", "willing to sponsor", "sponsor visas", "sponsor a visa", "visa support", "visa assistance", "work permit support", "work permit sponsorship", "immigration support", "skilled worker visa", "blue card", "employment pass", "work visa provided", "highly skilled migrant"]
+  negative: ["no sponsorship", "no visa sponsorship", "no visa support", "without sponsorship", "unable to sponsor", "unable to offer sponsorship", "unable to provide sponsorship", "cannot sponsor", "can't sponsor", "cannot offer sponsorship", "cannot provide sponsorship", "not able to sponsor", "not able to offer sponsorship", "will not sponsor", "won't sponsor", "do not sponsor", "does not sponsor", "not sponsor", "not offer sponsorship", "do not offer sponsorship", "does not offer sponsorship", "not offer visa", "not provide sponsorship", "not provide visa", "sponsorship is not available", "sponsorship not available", "sponsorship is not offered", "not eligible for sponsorship", "not in a position to sponsor", "not currently sponsor*", "no work permit", "sponsorship will not be provided", "visa sponsorship is not", "not able to provide visa"]
+  work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*"]
+
+
+# ═════════ 7. REMOTE ═════════
+# Job remote di luar Indonesia/Malaysia/Ireland: boleh kalau worldwide ATAU sponsor disebut.
+# Dibuang kalau tidak worldwide DAN menyebut syarat izin kerja / domisili tertentu.
+remote:
+  worldwide: [worldwide, "anywhere in the world", "work from anywhere", "global remote", "location independent", "any location", "all countries", "open to candidates globally", "international candidates"]
+  restrict: ["must be based in", "must be located in", "must reside", "must live in", "residents of", "resident in", "based in the eu", "based in the uk", "based in the us", "us only", "eu only", "uk only", "within the eu", "within the uk"]
+
+
+# ═════════ 8. INDUSTRI YANG DIHINDARI ═════════
+industry:
+  # dicek pada JUDUL + NAMA COMPANY
+  exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer]
+  # dicek pada DESKRIPSI (hanya kata yang kuat)
+  exclude_description: [casino*, gambling, pork]
+
+
+# ═════════ 9. PROFIL & SKOR "COCOK" (0-100) ═════════
+# Tahap 1 (gratis): skor aturan dari judul, skill, sponsor, negara.
+# Tahap 2 (opsional, gratis): Gemini menilai lebih dalam bila secret GEMINI_API_KEY diisi. Bagian summary & notes di bawah dibaca Gemini.
 profile:
-  summary: 'MSc International Management (University of Galway), BSc Landscape Architecture (IPB). Practical operations
-    experience in Australia, Ireland, Indonesia and USA. Food manufacturing: production, HACCP/GMP compliance, ERP/MES
-    entries, stock checks, inventory discrepancy investigation, quality records. Retail: incoming goods verification,
-    till/POS reconciliation and customer service. Horticulture and greenhouse operations. Remote AI data evaluation:
-    multimodal output quality review and structured rationales. English EF SET C2 and Bahasa Indonesia. No software
-    engineering, machine learning engineering or advanced data science background.'
-  notes: Roles should be individually junior/associate/experienced-support level. Separate short jobs across sectors
-    do not imply four continuous years of a single specialty. Do not assume advanced Power BI, programming, logistics
-    ownership, formal project leadership, sales quota experience, or professional consulting. No driving licence
-    or own transport. Not interested in supply-chain-centric jobs, banking, insurance, tax, law, medicine, construction,
-    casinos, pork or alcohol. Overseas onsite/hybrid usually needs visa sponsorship; Ireland Stamp 1G is time-limited
-    and not proof of permanent authorization. Jobs with no sponsorship information need verification, not automatic
-    rejection. Prefer travel/relocation, only full-time or fixed-term contract. Remote worldwide or explicitly eligible
-    to work from Indonesia; Malaysia remote possible, but confirm legal employment constraints.
-  target_titles:
-  - operations associate
-  - operation* coordinator
-  - operations specialist
-  - operations assistant
-  - operations officer
-  - operations administrator
-  - business operations
-  - business support
-  - business associate
-  - business administrator
-  - project officer
-  - project associate
-  - project support
-  - project assistant
-  - project administrator
-  - project coordinator
-  - programme assistant
-  - program assistant
-  - programme officer
-  - program officer
-  - production operative
-  - production assistant
-  - production coordinator
-  - production planner
-  - production planning
-  - manufacturing associate
-  - manufacturing operative
-  - inventory control
-  - inventory assistant
-  - stock control
-  - quality control assistant
-  - quality assurance assistant
-  - quality coordinator
-  - process improvement associate
-  - horticulture assistant
-  - horticultural technician
-  - nursery operations
-  - greenhouse assistant
-  - agriculture officer
-  - agricultural operations
-  - market access associate
-  - market entry associate
-  - market research assistant
-  - research assistant
-  - international operations
-  - global operations
-  - international business associate
-  - business transformation associate
-  - strategy associate
-  - graduate programme
-  - graduate program
-  - graduate scheme
-  - graduate trainee
-  - management trainee
-  - officer operations
-  - operations executive
-  - operations analyst
-  - ai data evaluator
-  - ai data annotator
-  - ai response evaluator
-  - ai quality reviewer
-  - ai trainer
-  - data annotation
-  - ai operations associate
-  - virtual assistant
-  skills:
-  - erp
-  - mes
-  - excel
-  - inventory
-  - stock reconciliation
-  - stock control
-  - stock verification
-  - quality assurance
-  - quality control
-  - food safety
-  - haccp
-  - gmp
-  - fssc 22000
-  - production
-  - manufactur*
-  - operational reporting
-  - documentation
-  - data validation
-  - process improvement
-  - root cause
-  - sop
-  - greenhouse
-  - horticultur*
-  - agricultur*
-  - hydroponic
-  - retail operations
-  - point of sale
-  - pos
-  - purchase order
-  - google workspace
-  - microsoft office
-  - power bi
-  - project coordination
-  - project support
-  - market research
-  - market entry
-  - market access
-  - international management
-  - ai evaluation
-  - llm evaluation
-  - annotation
-  - multimodal
-  - prompt evaluation
-  - transcription
-  - data labeling
-  - llm
-  - customer service
-  boost_any:
-  - visa sponsorship
-  - visa sponsor*
-  - relocation assistance
-  - relocation package
-  - work permit sponsorship
-  - willing to sponsor
-  - international applicants
-  - travel required
-  avoid_title_any:
-  - senior
-  - director
-  - head of
-  - vp
-  - vice president
-  - principal
-  - chief
-  - lead
-  - manager
-  - architect
-  - engineer
-  - developer
-  - scientist
-  - account executive
-  - sales representative
-  preferred_locations:
-  - indonesia
-  - jakarta
-  - depok
-  - bogor
-  - malaysia
-  - kuala lumpur
-  - ireland
-  - dublin
-  - cork
-  - galway
-  - limerick
-  - united kingdom
-  - uk
-  - edinburgh
-  - netherlands
-  - germany
-  - switzerland
-  - italy
-  - spain
-  - sweden
-  - denmark
-  - norway
-  - greece
-  - iceland
-  - australia
-  - new zealand
-  - saudi arabia
-  - qatar
-  - kuwait
-  - remote
-  - worldwide
-  - europe
-  max_years_required: 4
+  summary: >
+    Operations generalist with an MSc in International Management (University of Galway, 2.1 Honours, Nov 2025;
+    coursework in project management, supply chain, global strategy, business transformation, international consulting).
+    Hands-on experience in food manufacturing (ERP/MES, HACCP, FSSC 22000, GMP, stock reconciliation, quality control,
+    production records), retail operations (POS, goods-in checks, ERP entry), horticulture/agriculture (greenhouses, nursery,
+    B2B supply) and currently remote generative-AI data evaluation (Outlier AI: structured quality rationales, guideline feedback).
+    Worked in Australia, Ireland, Indonesia and the US. English C2 and Bahasa Indonesia.
+    Tools: Excel, Power BI (basic), Google Workspace, Notion, ClickUp, Slack, LLM tools.
+  notes: >
+    REAL experience is fragmented: several short stints (retail about 3 months, manufacturing a few months, seasonal horticulture),
+    roughly 1.5 to 2 years of full-time-equivalent relevant work. It is NOT 4 solid years. Entry to junior level only; never senior,
+    manager-level reach, director or head roles. Target: operations, business support, project support/officer, production planning,
+    market research/entry/access, business development, international/global operations or strategy, sustainability coordination,
+    in FMCG, agriculture, horticulture, food manufacturing, retail, wholesale, consulting, MNE/SME.
+    AI roles: ONLY non-technical AI operations (data quality, evaluation, annotation, AI project/program coordination, AI adoption support).
+    Reject anything needing programming, ML engineering, data science or a computer science degree.
+    Avoid industries: alcohol, pork, gambling, banking/finance/tax/law, medical/pharma, pure engineering, construction, insurance.
+    Full-time or contract only. Strong plus: sponsorship, relocation package, willingness to travel is fine.
+    Soft skills are generic; weigh the technical skills above.
+  target_titles: ["operations coordinator", "operation coordinator", "operations specialist", "operations analyst", "operations associate", "operations officer", "operations assistant", "business operations", "business operation", "business support", "business associate", "business development", "project officer", "project associate", "project support", "project coordinator", "production planner", "production planning", "production coordinator", "supply chain coordinator", "supply chain analyst", "supply chain associate", "global operations", "international operations", "global strategy", "international strategy", "market access", "market research", "market entry", "virtual assistant", "sustainability coordinator", "sustainability analyst", "sustainability officer", "quality coordinator", "quality control", "quality assurance", "inventory", "procurement", "logistics coordinator", "business analyst", "management trainee", "graduate programme", "graduate program", "graduate scheme", "AI operations", "AI data", "data annotation", "LLM evaluation", "AI quality", "AI project coordinator"]
+  weak_titles: [associate, officer, coordinator, planner, operative, operations, operation, production, manufacturing, assistant, analyst, project, support, specialist]
+  avoid_title_soft: [manager, "team lead", supervisor]       # kurangi poin (bukan dibuang)
+  skills: [erp, mes, excel, "power bi", haccp, "fssc 22000", gmp, "quality control", "quality assurance", "root cause", "inventory*", "stock", "sop*", "non-conformance*", "production planning", "data validation", reporting, documentation, "project coordination", "process improvement", "supply chain", "cold chain", "market research", "generative ai", "llm*", "annotation", "ai evaluation", "stakeholder*", "cross-functional", clickup, notion, "google workspace", procurement, logistics, horticulture, agriculture, greenhouse, nursery, hydroponic*, "food safety", b2b, negotiation, consulting, strategy, "food manufacturing", fmcg]
+  boost_any: ["relocation*", "willingness to travel", "willing to travel", "international travel"]
+
 scoring:
-  min_score_rules: 50
-  min_score_ai: 50
-  use_gemini: false
-  gemini_models: []
-  gemini_max_per_run: 0
-  gemini_min_rule_score: 20
+  min_score_rules: 50          # ambang kirim kalau TANPA Gemini
+  min_score_ai: 60             # ambang kirim kalau Gemini aktif
+  use_gemini: true             # false = matikan Gemini walau secret ada
+  # Dicoba berurutan. Kalau semua ditolak, radar otomatis mencari model flash yang tersedia di akunmu.
+  gemini_models: [gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash]
+  gemini_max_per_run: 25       # batas job yang dinilai Gemini per run (jaga kuota gratis)
+  gemini_min_rule_score: 30    # job dengan skor aturan di bawah ini tidak dikirim ke Gemini
+  # Bobot skor aturan (opsional, ubah kalau hasil terasa kurang pas):
+  # weights: { title_target: 40, title_weak: 15, skill_each: 5, skill_max: 25, sponsor_pos_required: 20, sponsor_unknown_required: -10 }
+
+
+# ═════════ 10. TELEGRAM ═════════
 telegram:
-  max_messages_per_run: 15
-  alert_on_errors: true
-  daily_summary: true
-  summary_hour_utc: 7
-screening:
-  enabled: true
-  strict_country: true
-  minimum_monthly_salary_idr: 9000000
-  minimum_monthly_salary_myr: 5000
-  allowed_countries:
-  - indonesia
-  - malaysia
-  - ireland
-  - united kingdom
-  - switzerland
-  - netherlands
-  - spain
-  - italy
-  - norway
-  - sweden
-  - denmark
-  - germany
-  - greece
-  - iceland
-  - australia
-  - new zealand
-  - saudi arabia
-  - qatar
-  - kuwait
-  sponsorship_required:
-  - united kingdom
-  - switzerland
-  - netherlands
-  - spain
-  - italy
-  - norway
-  - sweden
-  - denmark
-  - germany
-  - greece
-  - iceland
-  - australia
-  - new zealand
-  - saudi arabia
-  - qatar
-  - kuwait
-  sponsorship_preferred:
-  - malaysia
-  - ireland
-  graduate_only:
-  - ireland
-  management_trainee_only:
-  - indonesia
-  allow_unknown_salary: true
-  allow_unknown_sponsorship: true
-  reject_if_local_language_mandatory: true
-  allow_unknown_employment_type: true
-  remote_allowed_countries:
-  - indonesia
-  - malaysia
-  excluded_industries:
-  - alcoholic beverage
-  - beer brewery
-  - wine distillery
-  - pork processing
-  - pig farm
-  - swine farm
-  - casino
-  - gambling
-  - betting
-  - sportsbook
-  - banking
-  - investment bank
-  - insurance
-  - tax advisory
-  - law firm
-  - legal services
-  - hospital
-  - medical device
-  - pharmaceutical
-  - pharma manufacturing
-  - civil engineering
-  - structural engineering
-  - construction company
-  blocked_title_patterns:
-  - software engineer
-  - machine learning engineer
-  - ml engineer
-  - data engineer
-  - ai engineer
-  - prompt engineer
-  - research scientist
-  - data scientist
-  - devops
-  - cloud engineer
-  - frontend
-  - backend
-  - full stack
-  - full-stack
-  - electrical engineer
-  - mechanical engineer
-  - civil engineer
-  - construction
-  - site engineer
-  - architect
-  - registered nurse
-  - doctor
-  - medical
-  - pharmacist
-  - lawyer
-  - accountant
-  - tax advisor
-  - insurance agent
-  - financial analyst
-  - investment analyst
-  - sales director
-  - business development manager
-  - sales manager
-  - supply chain manager
-  - logistics manager
-  - warehouse manager
-  prohibited_transport:
-  - valid driving licence
-  - valid driving license
-  - driving licence required
-  - driving license required
-  - must have a driver
-  - own transportation
-  - own transport
-  - own vehicle
-  - own car
-  max_years_required: 4
+  max_messages_per_run: 25     # sisanya dikirim ringkas dalam 1 pesan (tidak hilang)
+  alert_on_errors: true        # kabari kalau sumber gagal (hanya kalau berubah, tidak spam)
+  daily_summary: true          # 1 pesan "radar masih hidup" per hari
+  summary_hour_utc: 6          # dikirim di run pertama setelah jam ini (UTC). 6 = run 06:17 UTC
