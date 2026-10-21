@@ -2,7 +2,7 @@ name: job-radar
 
 on:
   schedule:
-    - cron: "17 */4 * * *"          # tiap 4 jam (UTC), menit 17 supaya tidak bentrok jam sibuk GitHub
+    - cron: "17 */6 * * *"          # tiap 4 jam (UTC), menit 17 supaya tidak bentrok jam sibuk GitHub
   workflow_dispatch:                 # tombol manual: Actions -> job-radar -> Run workflow
     inputs:
       mode:
