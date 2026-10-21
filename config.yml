@@ -1,108 +1,490 @@
-# ╔════════════════════════════════════════════════════════════════╗
-# ║  JOB RADAR — ini SATU-SATUNYA file yang perlu kamu edit        ║
-# ║  Edit langsung di github.com (ikon pensil) → Commit.           ║
-# ║  Run berikutnya otomatis pakai isi terbaru.                    ║
-# ╚════════════════════════════════════════════════════════════════╝
-#
-# ATURAN KEYWORD (berlaku di semua daftar di bawah):
-#   • Tidak peka huruf besar/kecil.
-#   • Cocok per KATA UTUH: "visa" TIDAK cocok dengan "revisable".
-#   • Tanda * = akhiran bebas: "sponsor*" cocok sponsor / sponsors / sponsorship.
-#   • Frasa boleh: "voluntary position", "right to work".
-#   • Daftar kosong [] = fitur itu dimatikan.
-#   • Hati-hati indentasi: pakai spasi (bukan tab), dan jangan hapus tanda "-" atau "[ ]".
+# JOB RADAR — konfigurasi sesuai CV, 21 Oktober 2026
+# Perubahan aturan yang bergantung pada negara ditangani oleh job_watch.py versi baru.
+# Edit daftar searches dengan hati-hati: tiap baris menambah durasi workflow.
+# Negara Edinburgh tercakup sebagai kota di United Kingdom.
+# Tidak ada Gemini. Lowongan tanpa gaji/sponsorship tidak otomatis ditolak.
 
-
-# ═════════ 1. PENCARIAN LUAS (Indeed / LinkedIn / Glassdoor / Google) ═════════
-# Cari seperti kamu ketik manual di situs job. Tambah baris sebanyak yang kamu mau.
-sites: [indeed, linkedin]      # pilihan: indeed, linkedin, glassdoor, google, zip_recruiter
-country_indeed: ireland        # negara untuk Indeed/Glassdoor (ireland, usa, uk, australia, indonesia, ...)
-hours_old: 12                  # hanya job yang diposting dalam N jam terakhir (biarkan > jadwal run, biar nggak ada yang lolos)
-results_per_search: 25         # per situs, per baris pencarian (LinkedIn lambat kalau terlalu besar)
-
+sites:
+- indeed
+country_indeed: ireland
+hours_old: 36
+search_rotation_groups: 4  # 35 pencarian dibagi 4 run, sekitar 9 tiap 6 jam
+results_per_search: 15
 searches:
-  - { term: "operations coordinator", location: "Dublin, Ireland" }
-  - { term: "operations specialist",  location: "Ireland" }
-  - { term: "business support",       location: "Dublin, Ireland" }
-  - { term: "project coordinator",    location: "Dublin, Ireland" }
-  # Contoh negara lain (override country_indeed per baris):
-  # - { term: "operations manager", location: "Jakarta, Indonesia", country: indonesia }
-
-
-# ═════════ 2. CAREER PAGE COMPANY LANGSUNG (API resmi, bukan scraping) ═════════
-# Radar cek semua lowongan company yang kamu daftarkan. Paling bersih & paling cepat.
-# Cara dapat slug: lihat URL career page company:
-#   boards.greenhouse.io/SLUG  atau  job-boards.greenhouse.io/SLUG  → greenhouse
-#   jobs.lever.co/SLUG                                             → lever
-#   jobs.ashbyhq.com/SLUG                                          → ashby
-# Nggak tahu company-nya pakai apa? Jalankan Actions → job-radar → mode "find-companies",
-# isi nama company (pisah koma), hasilnya dikirim ke Telegram.
+- term: operations associate
+  location: Jakarta, Indonesia
+  country: indonesia
+- term: business operations
+  location: Indonesia
+  country: indonesia
+- term: management trainee operations
+  location: Indonesia
+  country: indonesia
+- term: production planning
+  location: Indonesia
+  country: indonesia
+- term: project officer
+  location: Indonesia
+  country: indonesia
+- term: operations associate
+  location: Malaysia
+  country: malaysia
+- term: business support
+  location: Kuala Lumpur, Malaysia
+  country: malaysia
+- term: production coordinator
+  location: Malaysia
+  country: malaysia
+- term: graduate programme operations
+  location: Ireland
+  country: ireland
+- term: operations coordinator
+  location: Ireland
+  country: ireland
+- term: project support officer
+  location: Ireland
+  country: ireland
+- term: business operations associate
+  location: Ireland
+  country: ireland
+- term: production planner
+  location: Ireland
+  country: ireland
+- term: operations associate
+  location: United Kingdom
+  country: uk
+- term: project officer
+  location: United Kingdom
+  country: uk
+- term: business support
+  location: Edinburgh, United Kingdom
+  country: uk
+- term: operations coordinator
+  location: Netherlands
+  country: netherlands
+- term: business operations
+  location: Germany
+  country: germany
+- term: project support
+  location: Switzerland
+  country: switzerland
+- term: operations associate
+  location: Italy
+  country: italy
+- term: operations associate
+  location: Spain
+  country: spain
+- term: operations associate
+  location: Sweden
+  country: sweden
+- term: operations associate
+  location: Denmark
+  country: denmark
+- term: operations associate
+  location: Norway
+  country: norway
+- term: operations associate
+  location: Greece
+  country: greece
+- term: operations associate
+  location: Iceland
+  country: iceland
+- term: operations associate
+  location: Australia
+  country: australia
+- term: production coordinator
+  location: Australia
+  country: australia
+- term: operations associate
+  location: New Zealand
+  country: new zealand
+- term: operations coordinator
+  location: Saudi Arabia
+  country: saudi arabia
+- term: operations associate
+  location: Qatar
+  country: qatar
+- term: business support
+  location: Kuwait
+  country: kuwait
+- term: AI data evaluator remote worldwide
+  location: Remote
+  country: usa
+- term: AI quality reviewer remote worldwide
+  location: Remote
+  country: usa
+- term: business operations remote worldwide
+  location: Remote
+  country: usa
 companies:
-  enabled: true
-  max_age_days: 14             # abaikan posting yang lebih tua dari ini (supaya run pertama nggak banjir)
-  # Pra-filter judul (biar ribuan job di board besar nggak ikut). Cocok sebagian kata (bukan kata utuh).
-  title_any: [operation, coordinator, analyst, administrator, assistant, specialist, support, project, program, business, associate, planner, logistic, supply]
-  location_any: [ireland, dublin, cork, galway, limerick, remote, emea, europe]
-  location_exclude_any: [united states, usa, u.s., canada, india, brazil, mexico]
-  greenhouse: [stripe]         # contoh valid — GANTI/TAMBAH company incaranmu
-  lever: [palantir]            # contoh valid
-  ashby: [ramp]                # contoh valid
-
-
-# ═════════ 3. FILTER KERAS (job gagal = langsung dibuang) ═════════
-# Dicek terhadap JUDUL + DESKRIPSI LENGKAP.
+  enabled: false
+  max_age_days: 14
+  title_any:
+  - operation
+  - project
+  - business
+  - production
+  - manufactur
+  - planning
+  - quality
+  - inventory
+  - horticultur
+  - agricultur
+  - market access
+  - research
+  - ai data
+  - evaluator
+  - coordinator
+  - support
+  - associate
+  - graduate
+  - trainee
+  location_any: []
+  location_exclude_any: []
+  greenhouse: []
+  lever: []
+  ashby: []
 filters:
-  include_any: [visa, sponsor*, work permit, "stamp 1g"]   # minimal SATU harus ada. Kosongkan [] kalau tidak mau syarat ini.
-  include_all: []                                           # SEMUA ini harus ada (jarang dipakai)
-  exclude_any:                                              # kalau ADA salah satu → dibuang
-    - voluntary position
-    - volunteer
-    - unpaid
-    - unable to sponsor
-    - cannot sponsor
-    - not able to sponsor
-    - will not sponsor
-    - no sponsorship
-    - no visa sponsorship
-    - do not offer sponsorship
-  title_exclude_any: [volunteer, unpaid]                    # dibuang kalau ada di JUDUL saja
-
-
-# ═════════ 4. PROFIL & SKOR "COCOK" ═════════
-# Setiap job yang lolos filter diberi skor 0–100 seberapa cocok untuk kamu.
-# Tahap 1 (gratis, tanpa internet): skor berbasis aturan di bawah.
-# Tahap 2 (opsional, gratis): Gemini menilai lebih dalam — aktif otomatis kalau secret GEMINI_API_KEY diisi.
+  include_any: []
+  include_all: []
+  exclude_any:
+  - volunteer
+  - voluntary position
+  - unpaid internship
+  - commission only
+  - commission-only
+  title_exclude_any:
+  - volunteer
+  - internship
+  - intern
+  - voluntary
+  - unpaid
+  - apprentice
 profile:
-  # (CONTOH — ganti dengan dirimu. Makin spesifik, makin akurat penilaian Gemini.)
-  summary: >
-    International operations and business support generalist. MSc International Management
-    (University of Galway, 2.1). Experience across Ireland, Indonesia, Australia and the US:
-    remote generative-AI data work, retail and food-production operations, horticulture.
-    Bilingual English/Bahasa Indonesia. Strengths: cross-cultural communication,
-    process coordination, AI tool adoption.
-  notes: >
-    Entry-to-mid level only (max about 4 years of experience required). Prefer Ireland-based or
-    remote-EU roles. Avoid commission-only sales. (CONTOH — ganti sesuai kamu)
-  target_titles: [operations coordinator, operations specialist, operations analyst, business support, business operations, project coordinator, program coordinator, business analyst, operations associate]
-  skills: [excel, process improvement, stakeholder*, project coordination, reporting, data analysis, supply chain, logistics, inventory, vendor*, procurement, documentation, cross-functional, kpi*, sop*, customer service, quality, generative ai, ai tools, training]
-  boost_any: [visa sponsorship, relocation, graduate programme, graduate program]   # + poin kalau ada (soft, bukan syarat)
-  avoid_title_any: [senior, director, head of, vp, principal, chief, lead]            # − poin kalau ada di judul
-  preferred_locations: [dublin, ireland, remote]
-  max_years_required: 4                                                               # − poin kalau job minta pengalaman lebih dari ini
-
+  summary: 'MSc International Management (University of Galway), BSc Landscape Architecture (IPB). Practical operations
+    experience in Australia, Ireland, Indonesia and USA. Food manufacturing: production, HACCP/GMP compliance, ERP/MES
+    entries, stock checks, inventory discrepancy investigation, quality records. Retail: incoming goods verification,
+    till/POS reconciliation and customer service. Horticulture and greenhouse operations. Remote AI data evaluation:
+    multimodal output quality review and structured rationales. English EF SET C2 and Bahasa Indonesia. No software
+    engineering, machine learning engineering or advanced data science background.'
+  notes: Roles should be individually junior/associate/experienced-support level. Separate short jobs across sectors
+    do not imply four continuous years of a single specialty. Do not assume advanced Power BI, programming, logistics
+    ownership, formal project leadership, sales quota experience, or professional consulting. No driving licence
+    or own transport. Not interested in supply-chain-centric jobs, banking, insurance, tax, law, medicine, construction,
+    casinos, pork or alcohol. Overseas onsite/hybrid usually needs visa sponsorship; Ireland Stamp 1G is time-limited
+    and not proof of permanent authorization. Jobs with no sponsorship information need verification, not automatic
+    rejection. Prefer travel/relocation, only full-time or fixed-term contract. Remote worldwide or explicitly eligible
+    to work from Indonesia; Malaysia remote possible, but confirm legal employment constraints.
+  target_titles:
+  - operations associate
+  - operation* coordinator
+  - operations specialist
+  - operations assistant
+  - operations officer
+  - operations administrator
+  - business operations
+  - business support
+  - business associate
+  - business administrator
+  - project officer
+  - project associate
+  - project support
+  - project assistant
+  - project administrator
+  - project coordinator
+  - programme assistant
+  - program assistant
+  - programme officer
+  - program officer
+  - production operative
+  - production assistant
+  - production coordinator
+  - production planner
+  - production planning
+  - manufacturing associate
+  - manufacturing operative
+  - inventory control
+  - inventory assistant
+  - stock control
+  - quality control assistant
+  - quality assurance assistant
+  - quality coordinator
+  - process improvement associate
+  - horticulture assistant
+  - horticultural technician
+  - nursery operations
+  - greenhouse assistant
+  - agriculture officer
+  - agricultural operations
+  - market access associate
+  - market entry associate
+  - market research assistant
+  - research assistant
+  - international operations
+  - global operations
+  - international business associate
+  - business transformation associate
+  - strategy associate
+  - graduate programme
+  - graduate program
+  - graduate scheme
+  - graduate trainee
+  - management trainee
+  - officer operations
+  - operations executive
+  - operations analyst
+  - ai data evaluator
+  - ai data annotator
+  - ai response evaluator
+  - ai quality reviewer
+  - ai trainer
+  - data annotation
+  - ai operations associate
+  - virtual assistant
+  skills:
+  - erp
+  - mes
+  - excel
+  - inventory
+  - stock reconciliation
+  - stock control
+  - stock verification
+  - quality assurance
+  - quality control
+  - food safety
+  - haccp
+  - gmp
+  - fssc 22000
+  - production
+  - manufactur*
+  - operational reporting
+  - documentation
+  - data validation
+  - process improvement
+  - root cause
+  - sop
+  - greenhouse
+  - horticultur*
+  - agricultur*
+  - hydroponic
+  - retail operations
+  - point of sale
+  - pos
+  - purchase order
+  - google workspace
+  - microsoft office
+  - power bi
+  - project coordination
+  - project support
+  - market research
+  - market entry
+  - market access
+  - international management
+  - ai evaluation
+  - llm evaluation
+  - annotation
+  - multimodal
+  - prompt evaluation
+  - transcription
+  - data labeling
+  - llm
+  - customer service
+  boost_any:
+  - visa sponsorship
+  - visa sponsor*
+  - relocation assistance
+  - relocation package
+  - work permit sponsorship
+  - willing to sponsor
+  - international applicants
+  - travel required
+  avoid_title_any:
+  - senior
+  - director
+  - head of
+  - vp
+  - vice president
+  - principal
+  - chief
+  - lead
+  - manager
+  - architect
+  - engineer
+  - developer
+  - scientist
+  - account executive
+  - sales representative
+  preferred_locations:
+  - indonesia
+  - jakarta
+  - depok
+  - bogor
+  - malaysia
+  - kuala lumpur
+  - ireland
+  - dublin
+  - cork
+  - galway
+  - limerick
+  - united kingdom
+  - uk
+  - edinburgh
+  - netherlands
+  - germany
+  - switzerland
+  - italy
+  - spain
+  - sweden
+  - denmark
+  - norway
+  - greece
+  - iceland
+  - australia
+  - new zealand
+  - saudi arabia
+  - qatar
+  - kuwait
+  - remote
+  - worldwide
+  - europe
+  max_years_required: 4
 scoring:
-  min_score_rules: 60          # ambang kirim kalau TANPA Gemini
-  min_score_ai: 65             # ambang kirim kalau Gemini aktif
-  use_gemini: true             # false = matikan Gemini walau secret ada
-  # Dicoba berurutan. Kalau semua ditolak, radar otomatis cari model flash yang tersedia di akunmu.
-  gemini_models: [gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash]
-  gemini_max_per_run: 20       # batas job yang dinilai Gemini per run (jaga kuota gratis)
-  gemini_min_rule_score: 20    # job dengan skor aturan di bawah ini tidak dikirim ke Gemini
-
-
-# ═════════ 5. TELEGRAM ═════════
+  min_score_rules: 50
+  min_score_ai: 50
+  use_gemini: false
+  gemini_models: []
+  gemini_max_per_run: 0
+  gemini_min_rule_score: 20
 telegram:
-  max_messages_per_run: 25     # sisanya dikirim ringkas dalam 1 pesan (tidak hilang)
-  alert_on_errors: true        # kabari kalau ada sumber yang gagal (hanya kalau berubah, tidak spam)
-  daily_summary: true          # 1 pesan "radar masih hidup" per hari + statistik
-  summary_hour_utc: 7          # jam kirim ringkasan (UTC). 7 = jam 8 pagi di Dublin musim panas
+  max_messages_per_run: 15
+  alert_on_errors: true
+  daily_summary: true
+  summary_hour_utc: 7
+screening:
+  enabled: true
+  strict_country: true
+  minimum_monthly_salary_idr: 9000000
+  minimum_monthly_salary_myr: 5000
+  allowed_countries:
+  - indonesia
+  - malaysia
+  - ireland
+  - united kingdom
+  - switzerland
+  - netherlands
+  - spain
+  - italy
+  - norway
+  - sweden
+  - denmark
+  - germany
+  - greece
+  - iceland
+  - australia
+  - new zealand
+  - saudi arabia
+  - qatar
+  - kuwait
+  sponsorship_required:
+  - united kingdom
+  - switzerland
+  - netherlands
+  - spain
+  - italy
+  - norway
+  - sweden
+  - denmark
+  - germany
+  - greece
+  - iceland
+  - australia
+  - new zealand
+  - saudi arabia
+  - qatar
+  - kuwait
+  sponsorship_preferred:
+  - malaysia
+  - ireland
+  graduate_only:
+  - ireland
+  management_trainee_only:
+  - indonesia
+  allow_unknown_salary: true
+  allow_unknown_sponsorship: true
+  reject_if_local_language_mandatory: true
+  allow_unknown_employment_type: true
+  remote_allowed_countries:
+  - indonesia
+  - malaysia
+  excluded_industries:
+  - alcoholic beverage
+  - beer brewery
+  - wine distillery
+  - pork processing
+  - pig farm
+  - swine farm
+  - casino
+  - gambling
+  - betting
+  - sportsbook
+  - banking
+  - investment bank
+  - insurance
+  - tax advisory
+  - law firm
+  - legal services
+  - hospital
+  - medical device
+  - pharmaceutical
+  - pharma manufacturing
+  - civil engineering
+  - structural engineering
+  - construction company
+  blocked_title_patterns:
+  - software engineer
+  - machine learning engineer
+  - ml engineer
+  - data engineer
+  - ai engineer
+  - prompt engineer
+  - research scientist
+  - data scientist
+  - devops
+  - cloud engineer
+  - frontend
+  - backend
+  - full stack
+  - full-stack
+  - electrical engineer
+  - mechanical engineer
+  - civil engineer
+  - construction
+  - site engineer
+  - architect
+  - registered nurse
+  - doctor
+  - medical
+  - pharmacist
+  - lawyer
+  - accountant
+  - tax advisor
+  - insurance agent
+  - financial analyst
+  - investment analyst
+  - sales director
+  - business development manager
+  - sales manager
+  - supply chain manager
+  - logistics manager
+  - warehouse manager
+  prohibited_transport:
+  - valid driving licence
+  - valid driving license
+  - driving licence required
+  - driving license required
+  - must have a driver
+  - own transportation
+  - own transport
+  - own vehicle
+  - own car
+  max_years_required: 4
