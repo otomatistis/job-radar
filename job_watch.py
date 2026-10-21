@@ -199,6 +199,11 @@ def http_get(url: str, tries: int = 3) -> requests.Response:
 # ───────────────────────────── SUMBER 1: JobSpy ─────────────────────────────
 def fetch_jobspy(cfg: dict, errors: dict, counts: dict) -> list:
     searches = cfg.get("searches") or []
+    rotation = int(cfg.get("search_rotation_groups") or 1)
+    if rotation > 1:
+        slot = int(datetime.now(timezone.utc).timestamp() // 21600) % rotation
+        searches = searches[slot::rotation]
+        print(f"Pencarian giliran {slot + 1}/{rotation}: {len(searches)} pencarian pada run ini")
     if not searches:
         return []
     try:
@@ -366,6 +371,149 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict) -> list:
     return out
 
 
+
+# ────────────────────── country-aware screening (no AI) ──────────────────────
+COUNTRY_ALIASES = {
+    'indonesia': ['indonesia','jakarta','depok','bogor','bandung','surabaya','bali','tangerang'],
+    'malaysia': ['malaysia','kuala lumpur','selangor','penang','johor'],
+    'ireland': ['ireland','dublin','galway','cork','limerick','waterford'],
+    'united kingdom': ['united kingdom','great britain','england','scotland','wales','northern ireland','edinburgh','london','manchester','birmingham','glasgow',' uk','uk,'],
+    'switzerland':['switzerland','zurich','zürich','geneva','basel','bern'],
+    'netherlands':['netherlands','amsterdam','rotterdam','utrecht','eindhoven','the hague'],
+    'spain':['spain','madrid','barcelona','valencia'],
+    'italy':['italy','milan','milano','rome','roma','turin','bologna'],
+    'norway':['norway','oslo','bergen'], 'sweden':['sweden','stockholm','gothenburg','malmö'],
+    'denmark':['denmark','copenhagen','aarhus'], 'germany':['germany','berlin','munich','münchen','hamburg','frankfurt'],
+    'greece':['greece','athens','thessaloniki'],'iceland':['iceland','reykjavik'],
+    'australia':['australia','sydney','melbourne','brisbane','perth','adelaide'],
+    'new zealand':['new zealand','auckland','wellington','christchurch'],
+    'saudi arabia':['saudi arabia','riyadh','jeddah'],'qatar':['qatar','doha'],
+    'kuwait':['kuwait'],
+}
+OTHER_COUNTRIES = ['united states',' usa','usa,','canada','india','philippines','singapore','brazil','mexico','uae','dubai','abu dhabi','hong kong','japan','china','south africa','poland','portugal','france','belgium','austria','turkey','turkiye']
+NEGATIVE_SPONSOR = re.compile(r'\b(?:no|without|not offering|does not offer|do not offer|cannot provide|unable to provide|will not provide|cannot offer|unable to offer|will not offer)\s+(?:visa\s+)?sponsorship\b|\b(?:unable|cannot|not able|will not|do not)\s+to\s+sponsor\b|\bno\s+(?:work\s+)?visa\s+sponsorship\b', re.I)
+WORK_AUTH = re.compile(r'\b(?:must|need|required|requires|only|already)\b.{0,65}\b(?:right to work|work authori[sz]ation|work permit|eligible to work|legally authorized to work)\b|\b(?:right to work|work authori[sz]ation|work permit|eligible to work|legally authorized to work)\b.{0,65}\b(?:required|must|without sponsorship)\b', re.I)
+LOCAL_LANGUAGES = ['dutch','german','french','italian','spanish','norwegian','swedish','danish','greek','icelandic','arabic','malay','mandarin','chinese','cantonese']
+REQUIRE_RX = r'(?:required|mandatory|essential|must (?:speak|know|be fluent|have|communicate)|fluency in|proficien(?:t|cy) in|native(?:-level)?|fluent in|business-level|professional working proficiency|excellent command of|working knowledge of)'
+NICE_RX = re.compile(r'\b(?:preferred|desirable|nice to have|a plus|advantage|bonus|optional|not required)\b', re.I)
+
+
+def infer_country(location: str) -> str:
+    l = ' ' + norm(location) + ' '
+    for country, aliases in COUNTRY_ALIASES.items():
+        if any(re.search(r'(?<!\w)' + re.escape(a.strip()) + r'(?!\w)', l) for a in aliases):
+            return country
+    if any(x in l for x in OTHER_COUNTRIES):
+        return 'other'
+    return ''
+
+
+def remote_scope(job: Job) -> tuple[bool, str]:
+    loc, desc = norm(job.location), norm(job.description)
+    remote = bool(re.search(r'\b(?:remote|work from home|wfh|work from anywhere|distributed|worldwide)\b', loc))
+    if not remote:
+        return False, ''
+    unrestricted = bool(re.search(r'\b(?:worldwide|anywhere in the world|globally remote|work from anywhere|global remote|remote globally|any country|without geographic restriction)\b', loc + ' ' + desc))
+    if unrestricted:
+        return True, 'worldwide'
+    # 'Remote - Europe' requires authorization in the corresponding jurisdiction.
+    restricted = bool(re.search(r'\b(?:remote (?:in|within|from|only|across)|based in|resid(?:e|ent) in|located in|must live in|must be based in|time zone|timezone|eu only|emea only|us only)\b', loc + ' ' + desc))
+    return True, 'restricted' if restricted else 'unknown'
+
+
+def salary_below_min(job: Job, country: str, screening: dict) -> bool:
+    if country not in ('indonesia','malaysia'):
+        return False
+    val = int(screening.get('minimum_monthly_salary_idr', 0) if country == 'indonesia' else screening.get('minimum_monthly_salary_myr', 0))
+    if not val:
+        return False
+    currency = r'(?:rp\.?|idr)' if country == 'indonesia' else r'(?:rm|myr)'
+    text = norm(job.description)
+    # Only accept explicit monthly pay. Avoid guessing from annual or hourly compensation.
+    matches = re.findall(r'(' + currency + r')\s*([\d.,]+)\s*(million|juta|k|thousand|ribu)?\s*(?:/\s*month|per month|monthly|sebulan|/\s*bulan|per bulan)', text, re.I)
+    for _, raw, multiplier in matches:
+        try:
+            number = float(raw.replace(',','')) if country == 'malaysia' else float(raw.replace('.','').replace(',','.'))
+            if multiplier in ('million','juta'): number *= 1000000
+            if multiplier in ('k','thousand','ribu'): number *= 1000
+            if number < val:
+                return True
+        except ValueError:
+            pass
+    return False
+
+
+def extra_screen(job: Job, screening: dict, profile: dict) -> tuple[bool, str, list]:
+    if not screening.get('enabled', False):
+        return True, '', []
+    title, desc, loc = norm(job.title), norm(job.description), norm(job.location)
+    combined = title + ' ' + desc
+    flags = []
+    country = infer_country(loc)
+    remote, scope = remote_scope(job)
+    if not country and not remote and screening.get('strict_country', True):
+        return False, 'lokasi tidak diketahui', flags
+    if (country == 'other' or (country and country not in screening.get('allowed_countries', []))) and not (remote and scope == 'worldwide'):
+        return False, 'di luar negara target', flags
+    for item in screening.get('blocked_title_patterns', []):
+        if re.search(r'(?<!\w)' + re.escape(norm(item)) + r'(?!\w)', title):
+            return False, 'judul di luar kemampuan / level', flags
+    if re.search(r'\b(?:senior|director|head of|principal|chief|vice president|vp|manager|team lead)\b', title):
+        return False, 'level manajerial/senior', flags
+    if any(phrase in title for phrase in ['part time','part-time','temporary part time','volunteer','internship','intern ','apprentice','freelance gig']):
+        return False, 'tipe kerja tidak sesuai', flags
+    if re.search(r'\b(?:part[- ]time only|only part[- ]time|part[- ]time position|part[- ]time contract|casual employment|unpaid position|unpaid role|volunteer position|internship position)\b', desc):
+        if not re.search(r'\b(?:full[- ]time or part[- ]time|part[- ]time or full[- ]time)\b', desc):
+            return False, 'bukan full-time/contract', flags
+    # Exclude industry only with strong explicit evidence; not generic words like "finance" or "legal" in duties.
+    for phrase in screening.get('excluded_industries', []):
+        if norm(phrase) in combined:
+            return False, 'industri yang dihindari', flags
+    for phrase in screening.get('prohibited_transport', []):
+        if norm(phrase) in desc:
+            return False, 'wajib SIM/kendaraan', flags
+    # Mandatory local-language detection; do not reject preferences.
+    if screening.get('reject_if_local_language_mandatory', True):
+        for language in LOCAL_LANGUAGES:
+            for sentence in re.split(r'[.!?;\n]', desc):
+                if not re.search(r'\b'+language+r'\b',sentence):
+                    continue
+                if NICE_RX.search(sentence):
+                    continue
+                if re.search(r'\b'+language+r'\b.{0,55}'+REQUIRE_RX+r'|'+REQUIRE_RX+r'.{0,55}\b'+language+r'\b',sentence):
+                    return False, 'bahasa lokal wajib: '+language, flags
+    if re.search(r'\b(?:graduate programme|graduate program|graduate scheme|graduate trainee|graduate development programme)\b',title) and country not in screening.get('graduate_only', []):
+        return False, 'graduate programme hanya Ireland', flags
+    if re.search(r'\bmanagement trainee\b',title) and country not in screening.get('management_trainee_only', []):
+        return False, 'management trainee hanya Indonesia', flags
+    # If a worldwide-remote post is explicit, it can be evaluated irrespective of the location label.
+    if remote:
+        if scope == 'worldwide':
+            flags.append('remote worldwide: pastikan Indonesia eligible di aplikasi')
+        elif country in screening.get('remote_allowed_countries', []):
+            flags.append('remote regional: cek izin kerja & residensi')
+        elif scope == 'restricted':
+            return False, 'remote dibatasi wilayah di luar Indonesia/Malaysia', flags
+        else:
+            flags.append('remote: eligibility negara belum jelas')
+    elif country in screening.get('sponsorship_required', []):
+        if NEGATIVE_SPONSOR.search(desc) or WORK_AUTH.search(desc):
+            return False, 'sponsorship ditolak / izin kerja wajib', flags
+        if not re.search(r'\b(?:visa sponsorship|visa sponsor|sponsor (?:a |your |the )?(?:work )?visa|work permit sponsorship|provide sponsorship|relocation and visa)\b', desc):
+            flags.append('sponsorship belum dikonfirmasi')
+    elif country in screening.get('sponsorship_preferred', []):
+        flags.append('sponsorship/izin kerja perlu dicek')
+    if salary_below_min(job,country,screening):
+        return False, 'gaji bulanan eksplisit di bawah minimum', flags
+    if re.search(r'\b(\d{1,2})\s*\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:relevant\s+|professional\s+|related\s+)?experience\b',desc):
+        yrs = [int(v) for v in re.findall(r'\b(\d{1,2})\s*\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:relevant\s+|professional\s+|related\s+)?experience\b',desc)]
+        if yrs and min(yrs)>int(screening.get('max_years_required',4)):
+            return False,'pengalaman wajib >4 tahun',flags
+    if not desc:
+        flags.append('deskripsi kosong: persyaratan belum terverifikasi')
+    return True, '', flags
+
+
 # ───────────────────────────── filter & skor ─────────────────────────────
 def hard_filter(job: Job, R: Rules):
     """-> (lolos, alasan, boleh_dicoba_lagi)"""
@@ -401,6 +549,8 @@ def rule_score(job: Job, R: Rules) -> int:
     score = 0
     if R.target_titles and hits(R.target_titles, title):
         score += 40
+    elif not any(k in title for k in ("operation", "production", "business", "project", "quality", "inventory", "horticultur", "agricultur", "evaluator", "annotation", "data annotat", "manufactur", "market access")):
+        score -= 20
     score += min(30, 6 * len(hits(R.skills, desc)))
     score += min(20, 10 * len(hits(R.boost, text)))
     if not R.pref_locs:
@@ -647,6 +797,7 @@ class State:
 # ───────────────────────────── pipeline utama ─────────────────────────────
 def run(cfg: dict, dry: bool) -> int:
     R = Rules(cfg)
+    screening = cfg.get("screening") or {}
     sc = cfg.get("scoring") or {}
     tgc = cfg.get("telegram") or {}
     tg = None if dry else make_telegram()
@@ -671,6 +822,12 @@ def run(cfg: dict, dry: bool) -> int:
             why[reason.split("'")[0].strip() or reason] += 1
             explain.append(f"  ✗ {reason:<45} {j.title} — {j.company}")
             continue
+        accepted, extra_reason, flags = extra_screen(j, screening, R.profile)
+        if not accepted:
+            why[extra_reason] += 1
+            explain.append(f"  ✗ {extra_reason:<45} {j.title} — {j.company}")
+            continue
+        j.risks.extend(flags)
         j.score = rule_score(j, R)
         cands.append(j)
     cands.sort(key=lambda x: -x.score)
