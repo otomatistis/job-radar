@@ -1,0 +1,108 @@
+# ╔════════════════════════════════════════════════════════════════╗
+# ║  JOB RADAR — ini SATU-SATUNYA file yang perlu kamu edit        ║
+# ║  Edit langsung di github.com (ikon pensil) → Commit.           ║
+# ║  Run berikutnya otomatis pakai isi terbaru.                    ║
+# ╚════════════════════════════════════════════════════════════════╝
+#
+# ATURAN KEYWORD (berlaku di semua daftar di bawah):
+#   • Tidak peka huruf besar/kecil.
+#   • Cocok per KATA UTUH: "visa" TIDAK cocok dengan "revisable".
+#   • Tanda * = akhiran bebas: "sponsor*" cocok sponsor / sponsors / sponsorship.
+#   • Frasa boleh: "voluntary position", "right to work".
+#   • Daftar kosong [] = fitur itu dimatikan.
+#   • Hati-hati indentasi: pakai spasi (bukan tab), dan jangan hapus tanda "-" atau "[ ]".
+
+
+# ═════════ 1. PENCARIAN LUAS (Indeed / LinkedIn / Glassdoor / Google) ═════════
+# Cari seperti kamu ketik manual di situs job. Tambah baris sebanyak yang kamu mau.
+sites: [indeed, linkedin]      # pilihan: indeed, linkedin, glassdoor, google, zip_recruiter
+country_indeed: ireland        # negara untuk Indeed/Glassdoor (ireland, usa, uk, australia, indonesia, ...)
+hours_old: 12                  # hanya job yang diposting dalam N jam terakhir (biarkan > jadwal run, biar nggak ada yang lolos)
+results_per_search: 25         # per situs, per baris pencarian (LinkedIn lambat kalau terlalu besar)
+
+searches:
+  - { term: "operations coordinator", location: "Dublin, Ireland" }
+  - { term: "operations specialist",  location: "Ireland" }
+  - { term: "business support",       location: "Dublin, Ireland" }
+  - { term: "project coordinator",    location: "Dublin, Ireland" }
+  # Contoh negara lain (override country_indeed per baris):
+  # - { term: "operations manager", location: "Jakarta, Indonesia", country: indonesia }
+
+
+# ═════════ 2. CAREER PAGE COMPANY LANGSUNG (API resmi, bukan scraping) ═════════
+# Radar cek semua lowongan company yang kamu daftarkan. Paling bersih & paling cepat.
+# Cara dapat slug: lihat URL career page company:
+#   boards.greenhouse.io/SLUG  atau  job-boards.greenhouse.io/SLUG  → greenhouse
+#   jobs.lever.co/SLUG                                             → lever
+#   jobs.ashbyhq.com/SLUG                                          → ashby
+# Nggak tahu company-nya pakai apa? Jalankan Actions → job-radar → mode "find-companies",
+# isi nama company (pisah koma), hasilnya dikirim ke Telegram.
+companies:
+  enabled: true
+  max_age_days: 14             # abaikan posting yang lebih tua dari ini (supaya run pertama nggak banjir)
+  # Pra-filter judul (biar ribuan job di board besar nggak ikut). Cocok sebagian kata (bukan kata utuh).
+  title_any: [operation, coordinator, analyst, administrator, assistant, specialist, support, project, program, business, associate, planner, logistic, supply]
+  location_any: [ireland, dublin, cork, galway, limerick, remote, emea, europe]
+  location_exclude_any: [united states, usa, u.s., canada, india, brazil, mexico]
+  greenhouse: [stripe]         # contoh valid — GANTI/TAMBAH company incaranmu
+  lever: [palantir]            # contoh valid
+  ashby: [ramp]                # contoh valid
+
+
+# ═════════ 3. FILTER KERAS (job gagal = langsung dibuang) ═════════
+# Dicek terhadap JUDUL + DESKRIPSI LENGKAP.
+filters:
+  include_any: [visa, sponsor*, work permit, "stamp 1g"]   # minimal SATU harus ada. Kosongkan [] kalau tidak mau syarat ini.
+  include_all: []                                           # SEMUA ini harus ada (jarang dipakai)
+  exclude_any:                                              # kalau ADA salah satu → dibuang
+    - voluntary position
+    - volunteer
+    - unpaid
+    - unable to sponsor
+    - cannot sponsor
+    - not able to sponsor
+    - will not sponsor
+    - no sponsorship
+    - no visa sponsorship
+    - do not offer sponsorship
+  title_exclude_any: [volunteer, unpaid]                    # dibuang kalau ada di JUDUL saja
+
+
+# ═════════ 4. PROFIL & SKOR "COCOK" ═════════
+# Setiap job yang lolos filter diberi skor 0–100 seberapa cocok untuk kamu.
+# Tahap 1 (gratis, tanpa internet): skor berbasis aturan di bawah.
+# Tahap 2 (opsional, gratis): Gemini menilai lebih dalam — aktif otomatis kalau secret GEMINI_API_KEY diisi.
+profile:
+  # (CONTOH — ganti dengan dirimu. Makin spesifik, makin akurat penilaian Gemini.)
+  summary: >
+    International operations and business support generalist. MSc International Management
+    (University of Galway, 2.1). Experience across Ireland, Indonesia, Australia and the US:
+    remote generative-AI data work, retail and food-production operations, horticulture.
+    Bilingual English/Bahasa Indonesia. Strengths: cross-cultural communication,
+    process coordination, AI tool adoption.
+  notes: >
+    Entry-to-mid level only (max about 4 years of experience required). Prefer Ireland-based or
+    remote-EU roles. Avoid commission-only sales. (CONTOH — ganti sesuai kamu)
+  target_titles: [operations coordinator, operations specialist, operations analyst, business support, business operations, project coordinator, program coordinator, business analyst, operations associate]
+  skills: [excel, process improvement, stakeholder*, project coordination, reporting, data analysis, supply chain, logistics, inventory, vendor*, procurement, documentation, cross-functional, kpi*, sop*, customer service, quality, generative ai, ai tools, training]
+  boost_any: [visa sponsorship, relocation, graduate programme, graduate program]   # + poin kalau ada (soft, bukan syarat)
+  avoid_title_any: [senior, director, head of, vp, principal, chief, lead]            # − poin kalau ada di judul
+  preferred_locations: [dublin, ireland, remote]
+  max_years_required: 4                                                               # − poin kalau job minta pengalaman lebih dari ini
+
+scoring:
+  min_score_rules: 60          # ambang kirim kalau TANPA Gemini
+  min_score_ai: 65             # ambang kirim kalau Gemini aktif
+  use_gemini: true             # false = matikan Gemini walau secret ada
+  # Dicoba berurutan. Kalau semua ditolak, radar otomatis cari model flash yang tersedia di akunmu.
+  gemini_models: [gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash]
+  gemini_max_per_run: 20       # batas job yang dinilai Gemini per run (jaga kuota gratis)
+  gemini_min_rule_score: 20    # job dengan skor aturan di bawah ini tidak dikirim ke Gemini
+
+
+# ═════════ 5. TELEGRAM ═════════
+telegram:
+  max_messages_per_run: 25     # sisanya dikirim ringkas dalam 1 pesan (tidak hilang)
+  alert_on_errors: true        # kabari kalau ada sumber yang gagal (hanya kalau berubah, tidak spam)
+  daily_summary: true          # 1 pesan "radar masih hidup" per hari + statistik
+  summary_hour_utc: 7          # jam kirim ringkasan (UTC). 7 = jam 8 pagi di Dublin musim panas
