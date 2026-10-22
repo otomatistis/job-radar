@@ -16,8 +16,9 @@
 sites: [indeed]               # indeed paling stabil dari server GitHub. linkedin sering diblok -> tambahkan sendiri kalau mau.
 hours_old: 14                 # ambil job yang diposting dalam N jam terakhir. Harus > jarak antar run (6 jam) supaya tidak ada yang lolos.
 results_per_search: 40        # maks hasil per pencarian
-max_search_minutes: 11        # BATAS waktu pencarian per run. Menjaga jatah 2.000 menit GitHub tidak habis.
+max_search_minutes: 8         # BATAS waktu pencarian Indeed per run. Menjaga jatah 2.000 menit GitHub tidak habis.
                               # Pencarian yang belum sempat jalan dilanjutkan di run berikutnya (dirotasi otomatis).
+                              # Situs yang error/diblok otomatis dilewati sisa run itu (tidak buang menit).
 
 
 # ═════════ 2. NEGARA TARGET ═════════
@@ -145,10 +146,26 @@ role_queries:
   - '("business development" OR "market research" OR "market entry" OR "market access" OR "international strategy" OR "global strategy" OR "global operations" OR "international operations" OR "sustainability coordinator" OR "virtual assistant")'
   - '("AI operations" OR "AI project coordinator" OR "AI data specialist" OR "AI quality" OR "data annotation" OR "LLM evaluation" OR "AI trainer" OR "AI program coordinator")'
 
-# Pencarian tambahan manual (opsional). Contoh remote worldwide lewat LinkedIn:
-# extra_searches:
-#   - { term: "operations coordinator", location: "Worldwide", remote: true, sites: [linkedin] }
+# Pencarian tambahan manual (opsional), contoh: { term: "operations coordinator", location: "Ireland", country: ireland }
+# Catatan: filter "remote" hanya jalan di Indeed (LinkedIn mengabaikannya). Job remote tetap tertangkap lewat pencarian biasa.
 extra_searches: []
+
+
+# ═════════ 3b. LINKEDIN (dua tahap, supaya cepat & hemat risiko blokir) ═════════
+# Tahap 1: ambil daftar job (tanpa deskripsi, cepat). Tahap 2: filter judul/negara dulu, baru ambil DESKRIPSI
+# hanya untuk yang lolos (maks max_descriptions per run, jeda acak, berhenti kalau 3x gagal berturut-turut).
+# LinkedIn sering memblokir IP server (termasuk GitHub). Kalau diblok: radar kirim alert 1x, melewati LinkedIn sisa run,
+# dan Indeed/company tetap jalan. Cek hasilnya lewat mode dry-run.
+# Query LinkedIn dipisah & ringkas (LinkedIn lambat: ±3-7 detik per halaman), dirotasi lintas run.
+linkedin:
+  enabled: true
+  max_minutes: 3              # batas waktu listing LinkedIn per run
+  hours_old: 30               # lebih longgar dari Indeed karena tiap kombinasi baru dikunjungi lagi setelah beberapa run
+  results_per_search: 25
+  max_descriptions: 25        # batas pengambilan deskripsi per run (tiap job = 1 request ke LinkedIn)
+  queries:
+    - '("operations coordinator" OR "operations associate" OR "operations analyst" OR "business support" OR "business operations" OR "project coordinator" OR "project officer" OR "supply chain coordinator")'
+    - '("business development" OR "market research" OR "market entry" OR "international operations" OR "sustainability coordinator" OR "production planner" OR "AI operations")'
 
 
 # ═════════ 4. CAREER PAGE COMPANY LANGSUNG (API resmi, bukan scraping) ═════════
@@ -162,6 +179,15 @@ companies:
   greenhouse: []              # contoh: [intercom, workhuman]
   lever: []
   ashby: []
+
+  # WORKDAY (banyak company besar). API internal, tidak resmi -> bisa berubah sewaktu-waktu.
+  # Cara: buka career page company -> klik daftar job -> copy URL sampai nama site-nya:
+  #   https://namacompany.wd3.myworkdayjobs.com/en-US/NamaSite
+  # Tes dulu: Actions -> Run workflow -> mode find-companies -> tempel URL-nya di kolom names.
+  workday: []                 # contoh: ["https://namacompany.wd3.myworkdayjobs.com/en-US/NamaSite"]
+  workday_search: [operations, coordinator, project, business, "supply chain", production, planning, sustainability, quality, analyst]   # dicari di server Workday
+  workday_max_pages: 2        # x20 job per istilah pencarian
+  workday_max_details: 60     # batas job BARU yang diambil detailnya per run (tiap job = 1 request)
 
 
 # ═════════ 5. FILTER KERAS (gagal satu = langsung dibuang) ═════════
@@ -232,6 +258,27 @@ filters:
     - electrician*
     - mechanic*
     - security guard
+    # accounting & turunannya (tidak punya pengalaman accounting)
+    - accounting
+    - accountancy
+    - bookkeep*
+    - payroll
+    - accounts payable
+    - accounts receivable
+    - accounts assistant
+    - accounts clerk
+    - accounts administrator
+    - accounts officer
+    - credit control*
+    - credit controller
+    - internal audit
+    - financial controller
+    - finance controller
+    - management accountant
+    - treasury
+    - ledger
+    - invoicing
+    - billing
 
   # Frasa di deskripsi yang membuang job (frasa spesifik, supaya "unpaid leave" / "volunteer days" sebagai benefit tidak ikut kena)
   exclude_any:
@@ -297,9 +344,9 @@ remote:
 # ═════════ 8. INDUSTRI YANG DIHINDARI ═════════
 industry:
   # dicek pada JUDUL + NAMA COMPANY
-  exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer]
+  exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
-  exclude_description: [casino*, gambling, pork]
+  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, cpa, "chartered accountant*", "qualified accountant*"]
 
 
 # ═════════ 9. PROFIL & SKOR "COCOK" (0-100) ═════════
