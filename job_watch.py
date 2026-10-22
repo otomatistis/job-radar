@@ -17,6 +17,7 @@ import hashlib
 import html
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -24,6 +25,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -365,11 +367,11 @@ def monthly_range(j: Job):
     return lo * f, hi * f
 
 
-def hard_filter(job: Job, R: Rules):
+def hard_filter(job: Job, R: Rules, pre: bool = False):
     """-> (lolos, alasan, boleh_dicoba_lagi). Mengisi job.country, job.sponsor, job.matched."""
     title, desc, company = norm(job.title), norm(job.description), norm(job.company)
     text = title + " " + desc
-    if len(desc) < 50:
+    if len(desc) < 50 and not pre:
         return False, "deskripsi kosong/gagal diambil (dicoba lagi run berikutnya)", True
 
     remote = is_remote_job(job)
@@ -406,6 +408,8 @@ def hard_filter(job: Job, R: Rules):
         h = hits(terms, title)
         if h and cc not in only_in:
             return False, f"'{h[0]}' hanya untuk {sorted(only_in)}", False
+    if pre:                                                 # tahap awal LinkedIn: cek judul/negara/tipe saja
+        return True, "", False
 
     lg = blocked_language(title, desc, R)
     if lg:
@@ -489,6 +493,53 @@ def http_get(url: str, tries: int = 3) -> requests.Response:
     raise last
 
 
+def http_post(url: str, body: dict, tries: int = 3) -> requests.Response:
+    last: Exception = RuntimeError("gagal")
+    for i in range(tries):
+        try:
+            r = requests.post(url, json=body, timeout=40,
+                              headers={"User-Agent": UA, "Accept": "application/json", "Content-Type": "application/json"})
+            if r.status_code >= 500 or r.status_code == 429:
+                last = RuntimeError(f"HTTP {r.status_code}")
+                pause(2 * (i + 1))
+                continue
+            return r
+        except requests.RequestException as e:
+            last = e
+            pause(2 * (i + 1))
+    raise last
+
+
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/124.0.0.0 Safari/537.36")
+
+
+def linkedin_details(url: str):
+    """Ambil deskripsi + tipe kerja dari halaman job publik LinkedIn. None = gagal (diblok/jaringan)."""
+    m = re.search(r"(\d{6,})\D*$", url.split("?")[0].rstrip("/"))
+    if not m:
+        return None
+    try:
+        r = requests.get(f"https://www.linkedin.com/jobs/view/{m.group(1)}", timeout=30,
+                         headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"})
+    except requests.RequestException:
+        return None
+    final = clean(getattr(r, "url", ""))
+    if r.status_code != 200 or (final and not urlparse(final).path.startswith("/jobs/view/")):
+        return None                                       # 429 / authwall / redirect
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+        div = soup.find("div", class_="show-more-less-html__markup")
+        h3 = soup.find("h3", class_="description__job-criteria-subheader",
+                       string=lambda t: t is not None and "Employment type" in t)
+        span = h3.find_next_sibling("span", class_="description__job-criteria-text") if h3 else None
+        return {"description": strip_html(str(div)) if div else "",
+                "job_type": span.get_text(strip=True) if span else None}
+    except Exception:
+        return None
+
+
 # ───────────────────────────── SUMBER 1: Indeed via JobSpy ─────────────────────────────
 def build_searches(cfg: dict) -> list:
     out = []
@@ -527,43 +578,58 @@ def row_to_job(r: dict, site: str, ckey) -> Job:
     )
 
 
-def fetch_jobspy(cfg: dict, start: int, errors: dict, counts: dict):
-    """-> (jobs, cursor_baru, jumlah_pencarian_dijalankan, total_kombinasi). Berhenti saat budget waktu habis."""
-    searches = build_searches(cfg)
+def build_li_searches(cfg: dict) -> list:
+    li = cfg.get("linkedin") or {}
+    if not li.get("enabled"):
+        return []
+    qs = [clean(q) for q in li.get("queries") or [] if clean(q)]
+    out = []
+    for key, c in (cfg.get("countries") or {}).items():
+        c = c or {}
+        if c.get("linkedin") is False:
+            continue
+        loc = clean(c.get("location")) or str(key).replace("_", " ").title()
+        for q in qs:
+            out.append(dict(term=q, location=loc, country=clean(c.get("indeed")) or None, ckey=str(key).lower(),
+                            label=f"linkedin {key}: {q[:30]}"))
+    return out
+
+
+def _scrape_batch(searches, start, deadline, sites, results, hours, fetch_desc, errors, counts, dead):
+    """-> (jobs, jumlah_pencarian_dijalankan). Situs yang error dimatikan untuk sisa run (hemat menit Actions)."""
     n = len(searches)
-    if n == 0:
-        return [], 0, 0, 0
+    out, done, start = [], 0, start % n
     try:
         from jobspy import scrape_jobs
     except Exception as e:
         errors["jobspy"] = f"JobSpy gagal di-import: {e}"
-        return [], start, 0, n
-    budget = float(cfg.get("max_search_minutes", 11)) * 60
-    sites = cfg.get("sites") or ["indeed"]
-    out, done, start = [], 0, start % n
+        return [], 0
     for step in range(n):
-        if done >= 1 and time.time() - T0 > budget:
+        if all(x in dead for x in sites):
+            break
+        if done >= 1 and time.time() > deadline:
             break
         s = searches[(start + step) % n]
         done += 1
         for site in s.get("sites") or sites:
-            kw = dict(
-                site_name=[site], search_term=s["term"], location=s.get("location"),
-                results_wanted=int(cfg.get("results_per_search", 40)),
-                hours_old=int(cfg.get("hours_old", 14)),
-                country_indeed=s.get("country") or "ireland", fetch_description=True,
-            )
-            if s.get("remote"):
+            if site in dead:
+                continue
+            kw = dict(site_name=[site], search_term=s["term"], location=s.get("location"),
+                      results_wanted=results, hours_old=hours,
+                      country_indeed=s.get("country") or "ireland", fetch_description=fetch_desc)
+            if s.get("remote") and site != "linkedin":      # LinkedIn mengabaikan is_remote
                 kw["is_remote"] = True
             try:
                 df = scrape_jobs(**kw)
             except Exception as e:
                 errors.setdefault(site, f"{s['label']}: {type(e).__name__}: {str(e)[:140]}")
+                dead.add(site)
                 continue
             try:                                            # JobSpy 1.4: error tidak di-raise, disimpan di attrs
                 for st_site, msg in ((getattr(df, "attrs", None) or {}).get("errors") or {}).items():
                     if msg:
                         errors.setdefault(clean(st_site) or site, f"{s['label']}: {str(msg)[:140]}")
+                        dead.add(site)
             except Exception:
                 pass
             if df is None or len(df) == 0:
@@ -571,7 +637,33 @@ def fetch_jobspy(cfg: dict, start: int, errors: dict, counts: dict):
             rows = df.to_dict("records")
             counts[site] = counts.get(site, 0) + len(rows)
             out.extend(row_to_job(r, site, s.get("ckey")) for r in rows)
-    return out, (start + done) % n, done, n
+    return out, done
+
+
+def fetch_jobspy(cfg: dict, start: int, errors: dict, counts: dict, dead: set):
+    """Indeed (dan situs lain selain LinkedIn). -> (jobs, cursor_baru, dijalankan, total_kombinasi)"""
+    searches = build_searches(cfg)
+    n = len(searches)
+    sites = [x for x in (cfg.get("sites") or ["indeed"]) if x != "linkedin"]
+    if n == 0 or not sites:
+        return [], 0, 0, n
+    deadline = T0 + float(cfg.get("max_search_minutes", 8)) * 60
+    jobs, done = _scrape_batch(searches, start, deadline, sites, int(cfg.get("results_per_search", 40)),
+                               int(cfg.get("hours_old", 14)), True, errors, counts, dead)
+    return jobs, (start % n + done) % n, done, n
+
+
+def fetch_linkedin(cfg: dict, start: int, errors: dict, counts: dict, dead: set):
+    """LinkedIn tahap 1: hanya listing (cepat, tanpa deskripsi). -> (jobs, cursor_baru, dijalankan, total)"""
+    searches = build_li_searches(cfg)
+    n = len(searches)
+    if n == 0:
+        return [], 0, 0, 0
+    li = cfg.get("linkedin") or {}
+    deadline = time.time() + float(li.get("max_minutes", 3)) * 60
+    jobs, done = _scrape_batch(searches, start, deadline, ["linkedin"], int(li.get("results_per_search", 25)),
+                               int(li.get("hours_old", 30)), False, errors, counts, dead)
+    return jobs, (start % n + done) % n, done, n
 
 
 # ───────────────────────────── SUMBER 2: career page company ─────────────────────────────
@@ -656,7 +748,100 @@ def _ashby(slug: str) -> list:
 ATS = {"greenhouse": _greenhouse, "lever": _lever, "ashby": _ashby}
 
 
-def fetch_companies(cfg: dict, errors: dict, counts: dict) -> list:
+# ── Workday (API internal yang dipakai halaman career-nya sendiri; tidak resmi, jadi parsing dibuat defensif)
+WD_AGE = re.compile(r"(\d+)\+?\s*days?\s*ago")
+WD_LOCALE = re.compile(r"[a-z]{2}(?:-[A-Za-z]{2})?")
+
+
+def wd_parse(url: str):
+    """https://tenant.wd3.myworkdayjobs.com/en-US/SiteName/... -> (host, tenant, site, locale)"""
+    u = urlparse(clean(url))
+    host = u.netloc.lower()
+    if not host.endswith("myworkdayjobs.com"):
+        raise ValueError("bukan URL myworkdayjobs.com")
+    parts = [p for p in u.path.split("/") if p]
+    locale = "en-US"
+    if parts and WD_LOCALE.fullmatch(parts[0]):
+        locale = parts.pop(0)
+    if not parts:
+        raise ValueError("nama site tidak ada di URL (contoh: .../en-US/NamaSite)")
+    return host, host.split(".")[0], parts[0], locale
+
+
+def wd_age_days(text):
+    t = norm(text)
+    if not t:
+        return None
+    if "today" in t:
+        return 0
+    if "yesterday" in t:
+        return 1
+    m = WD_AGE.search(t)
+    return int(m.group(1)) if m else None
+
+
+def _workday(url: str, c: dict, seen_fn, budget: dict, title_any: list, max_age: int):
+    host, tenant, site, locale = wd_parse(url)
+    base = f"https://{host}/wday/cxs/{tenant}/{site}"
+    terms = [clean(t) for t in c.get("workday_search") or [] if clean(t)] or [""]
+    pages = max(1, int(c.get("workday_max_pages") or 2))
+    found: dict = {}
+    for ti, term in enumerate(terms):
+        for p in range(pages):
+            r = http_post(base + "/jobs", {"appliedFacets": {}, "limit": 20, "offset": p * 20, "searchText": term})
+            if r.status_code in (400, 404, 422):
+                if not found and ti == 0 and p == 0:
+                    raise NotFound(url)
+                break
+            r.raise_for_status()
+            posts = r.json().get("jobPostings") or []
+            for jp in posts:
+                path = clean(jp.get("externalPath"))
+                if path and path not in found:
+                    found[path] = jp
+            if len(posts) < 20:
+                break
+            pause(0.3)
+        pause(0.3)
+    now = datetime.now(timezone.utc)
+    out = []
+    for path, jp in found.items():
+        title = clean(jp.get("title"))
+        if title_any and not any(x in norm(title) for x in title_any):
+            continue
+        age = wd_age_days(jp.get("postedOn"))
+        if max_age and age is not None and age > max_age:
+            continue
+        pub = f"https://{host}/{locale}/{site}{path}"
+        if seen_fn and seen_fn(pub):
+            continue                                   # sudah pernah diproses: hemat 1 request detail
+        if budget["details"] <= 0:
+            continue                                   # ditunda ke run berikutnya
+        budget["details"] -= 1
+        d: dict = {}
+        try:
+            r = http_get(base + path)
+            if r.status_code == 200:
+                d = r.json().get("jobPostingInfo") or {}
+        except Exception:
+            pass
+        pause(0.3)
+        locs = [clean(d.get("location")) or clean(jp.get("locationsText"))]
+        locs += [clean(x) for x in d.get("additionalLocations") or [] if isinstance(x, str)]
+        country = clean((d.get("country") or {}).get("descriptor")) if isinstance(d.get("country"), dict) else ""
+        loc = ", ".join(dict.fromkeys(x for x in locs if x))
+        if country and norm(country) not in norm(loc):
+            loc = f"{loc}, {country}" if loc else country
+        out.append(Job(
+            source="workday", title=title or clean(d.get("title")), company=tenant, location=loc, url=pub,
+            description=strip_html(d.get("jobDescription")),
+            posted=(now - timedelta(days=age)) if age is not None else parse_dt(d.get("startDate")),
+            job_type=d.get("timeType"), remote="remote" in norm(d.get("remoteType")),
+        ))
+    return out, len(found)
+
+
+def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list:
     c = cfg.get("companies") or {}
     if not c.get("enabled", True):
         return []
@@ -664,6 +849,25 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict) -> list:
     max_age = int(c.get("max_age_days") or 0)
     now = datetime.now(timezone.utc)
     out = []
+    wd_budget = {"details": int(c.get("workday_max_details") or 60)}
+    for url in c.get("workday") or []:
+        url = clean(url)
+        if not url:
+            continue
+        key = f"workday/{(urlparse(url).netloc.split('.')[0] or url)[:30]}"
+        try:
+            jobs, n = _workday(url, c, seen_fn, wd_budget, title_any, max_age)
+        except NotFound:
+            errors[key] = "URL tidak valid / situs menolak. Pakai URL halaman daftar job, mis. https://x.wd3.myworkdayjobs.com/en-US/NamaSite"
+            continue
+        except ValueError as e:
+            errors[key] = str(e)
+            continue
+        except Exception as e:
+            errors[key] = f"{type(e).__name__}: {str(e)[:140]}"
+            continue
+        counts["workday"] = counts.get("workday", 0) + n
+        out.extend(jobs)
     for ats, fn in ATS.items():
         for slug in c.get(ats) or []:
             slug = clean(slug)
@@ -892,7 +1096,7 @@ def fmt_job(j: Job) -> str:
 # ───────────────────────────── state ─────────────────────────────
 class State:
     def __init__(self):
-        self.d = {"seen": [], "last_errors": [], "last_summary": "", "cursor": 0,
+        self.d = {"seen": [], "last_errors": [], "last_summary": "", "cursor": 0, "li_cursor": 0,
                   "stats": {"sent": 0, "runs": 0, "scanned": {}, "searched": 0}}
         if STATE_FILE.exists():
             try:
@@ -933,12 +1137,28 @@ def run(cfg: dict, dry: bool) -> int:
     errors: dict = {}
     counts: dict = {}
 
-    comp_jobs = fetch_companies(cfg, errors, counts)                       # cepat, selalu jalan penuh
-    js_jobs, cursor, searched, total = fetch_jobspy(cfg, int(state.d.get("cursor", 0)), errors, counts)
-    jobs = comp_jobs + js_jobs
+    comp_jobs = fetch_companies(cfg, errors, counts,                       # cepat, selalu jalan penuh
+                                seen_fn=lambda u: ("u:" + sha(canon_url(u))) in state.seen)
+    dead: set = set()                                                      # situs yang error: dilewati sisa run
+    js_jobs, cursor, searched, total = fetch_jobspy(cfg, int(state.d.get("cursor", 0)), errors, counts, dead)
+    li_jobs, li_cursor, li_done, li_total = fetch_linkedin(cfg, int(state.d.get("li_cursor", 0)), errors, counts, dead)
+    searched, total = searched + li_done, total + li_total
+    jobs = comp_jobs + js_jobs + li_jobs
 
     # ---- tahap 1: dedup + filter keras + skor aturan
-    batch, cands, why, explain = set(), [], Counter(), []
+    batch, cands, why, explain, li_pending = set(), [], Counter(), [], []
+
+    def evaluate(j: Job, pre: bool = False) -> bool:
+        ok, reason, _retry = hard_filter(j, R, pre=pre)
+        if not ok:
+            why[reason.split(":")[0].split("'")[0].strip()] += 1
+            explain.append(f"  ✗ {reason:<60} {j.title} — {j.company} [{j.country}]")
+            return False
+        if not pre:
+            j.score = rule_score(j, R)
+            cands.append(j)
+        return True
+
     for j in jobs:
         if not j.url or not j.title:
             continue
@@ -946,13 +1166,33 @@ def run(cfg: dict, dry: bool) -> int:
         if any(k in batch for k in ks) or state.has(j):
             continue
         batch.update(ks)
-        ok, reason, _retry = hard_filter(j, R)
-        if not ok:
-            why[reason.split(":")[0].split("'")[0].strip()] += 1
-            explain.append(f"  ✗ {reason:<60} {j.title} — {j.company} [{j.country}]")
+        if j.source == "linkedin" and len(j.description) < 50:
+            if evaluate(j, pre=True):                       # deskripsi diambil belakangan, hanya untuk yang lolos
+                li_pending.append(j)
             continue
-        j.score = rule_score(j, R)
-        cands.append(j)
+        evaluate(j)
+
+    if li_pending:
+        li_cap = int((cfg.get("linkedin") or {}).get("max_descriptions", 25))
+        li_pending.sort(key=lambda x: x.posted or datetime(1970, 1, 1, tzinfo=timezone.utc), reverse=True)
+        fails = 0
+        for j in li_pending[:li_cap]:
+            det = linkedin_details(j.url)
+            if det is None:
+                fails += 1
+                if fails >= 3:
+                    errors["linkedin"] = "gagal ambil deskripsi job (kemungkinan diblok LinkedIn); sisanya ditunda ke run berikutnya"
+                    break
+                continue
+            fails = 0
+            j.description = det.get("description") or ""
+            if det.get("job_type"):
+                j.job_type = det["job_type"]
+            pause(random.uniform(1.5, 3.5))
+            if not evaluate(j) and len(j.description) >= 50:
+                state.add(j)                                # sudah dibaca & gugur: jangan ambil deskripsinya lagi
+        if len(li_pending) > li_cap:
+            why["linkedin ditunda (batas deskripsi per run)"] += len(li_pending) - li_cap
     cands.sort(key=lambda x: -x.score)
 
     # ---- tahap 2: Gemini (opsional)
@@ -1030,6 +1270,7 @@ def run(cfg: dict, dry: bool) -> int:
     st["runs"] += 1
     st["searched"] += searched
     state.d["cursor"] = cursor
+    state.d["li_cursor"] = li_cursor
     for k, v in counts.items():
         st["scanned"][k] = st["scanned"].get(k, 0) + v
     keys = sorted(errors)
@@ -1045,7 +1286,7 @@ def run(cfg: dict, dry: bool) -> int:
     if tgc.get("daily_summary", True) and state.d.get("last_summary") != today and now.hour >= int(tgc.get("summary_hour_utc", 6)):
         scanned = " · ".join(f"{k} {v}" for k, v in sorted(st["scanned"].items())) or "belum ada data"
         tg.send(f"📊 <b>Radar masih hidup</b>\nSejak ringkasan terakhir: {st['runs']} run, {st['sent']} job dikirim.\n"
-                f"Pencarian dijalankan: {st['searched']} (total {total} kombinasi, dirotasi tiap run)\n"
+                f"Pencarian dijalankan: {st['searched']} (total {total} kombinasi per putaran, dirotasi tiap run)\n"
                 f"Diambil per sumber: {esc(scanned)}\n"
                 f"Gemini: {'aktif' if gem and gem.alive else 'tidak aktif (skor berbasis aturan)'}\n"
                 "Catatan: sumber yang selalu 0 kemungkinan diblokir.")
@@ -1062,10 +1303,10 @@ def run(cfg: dict, dry: bool) -> int:
 def test_telegram(cfg: dict) -> int:
     tg = make_telegram()
     c = cfg.get("companies") or {}
-    ncomp = sum(len(c.get(a) or []) for a in ATS)
+    ncomp = sum(len(c.get(a) or []) for a in (*ATS, "workday"))
     gem = "aktif" if os.getenv("GEMINI_API_KEY", "").strip() and (cfg.get("scoring") or {}).get("use_gemini", True) else "tidak aktif"
     tg.send("✅ <b>Job Radar online</b>\n"
-            f"Negara: {len(cfg.get('countries') or {})} | kombinasi pencarian: {len(build_searches(cfg))}\n"
+            f"Negara: {len(cfg.get('countries') or {})} | kombinasi pencarian: Indeed {len(build_searches(cfg))}, LinkedIn {len(build_li_searches(cfg))}\n"
             f"Company langsung: {ncomp}\nGemini: {gem}\n"
             f"Budget waktu pencarian: {cfg.get('max_search_minutes', 11)} menit/run")
     print("pesan tes terkirim")
@@ -1076,6 +1317,22 @@ def find_companies(names: str) -> int:
     tg = make_telegram()
     lines = []
     for raw in [n.strip() for n in names.split(",") if n.strip()]:
+        if raw.lower().startswith("http"):                 # tes URL Workday
+            try:
+                host, tenant, site, _loc = wd_parse(raw)
+                r = http_post(f"https://{host}/wday/cxs/{tenant}/{site}/jobs",
+                              {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": ""})
+                posts = (r.json().get("jobPostings") or []) if r.status_code == 200 else []
+                if posts:
+                    sample = "; ".join(esc(clean(p.get("title"))) for p in posts[:3])
+                    lines.append(f"✅ <b>Workday {esc(tenant)}/{esc(site)}</b>: terbaca ({len(posts)}+ job). Contoh: {sample}\n"
+                                 "   tempel URL ini ke config.yml bagian companies → workday")
+                else:
+                    lines.append(f"❌ <b>{esc(raw)}</b>: Workday menolak / URL salah (HTTP {r.status_code}). "
+                                 "Pakai URL halaman daftar job, mis. https://x.wd3.myworkdayjobs.com/en-US/NamaSite")
+            except Exception as e:
+                lines.append(f"❌ <b>{esc(raw)}</b>: {esc(type(e).__name__)}: {esc(str(e)[:120])}")
+            continue
         base = norm(raw)
         slugs = list(dict.fromkeys([re.sub(r"[^a-z0-9]", "", base), re.sub(r"[^a-z0-9]+", "-", base).strip("-")]))
         found = []
