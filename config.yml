@@ -58,6 +58,7 @@ countries:
     indeed: uk
     location: United Kingdom
     sponsor: required
+    min_salary: { amount: 41700, currency: GBP, period: yearly }   # Skilled Worker umum (sejak 22 Jul 2025). Entry rate 33400 hanya untuk <26 th / lulusan UK. Going rate per jabatan bisa lebih tinggi.
     tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb]
   switzerland:
     indeed: switzerland
@@ -68,6 +69,7 @@ countries:
     indeed: netherlands
     location: Netherlands
     sponsor: required
+    min_salary: { amount: 4357, currency: EUR }   # kennismigrant <30 th, bruto/bulan tanpa uang liburan. 30+ th: 5942. Lulusan baru kriteria reduksi: 3122. Cek IND per 1 Jan & 1 Jul.
     tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven]
   spain:
     indeed: spain
@@ -83,16 +85,19 @@ countries:
     indeed: norway
     location: Norway
     sponsor: required
+    min_salary: { amount: 545400, currency: NOK, period: yearly }   # skilled worker tanpa kontrak kolektif, level bachelor (master: 624700). Perkiraan, cek UDI.
     tokens: [oslo, bergen, trondheim, stavanger]
   sweden:
     indeed: sweden
     location: Sweden
     sponsor: required
+    min_salary: { amount: 34470, currency: SEK }   # 80% median gaji, sejak 16 Jun 2026 (perkiraan, cek Migrationsverket)
     tokens: [stockholm, gothenburg, malmö, malmo, uppsala]
   denmark:
     indeed: denmark
     location: Denmark
     sponsor: required
+    min_salary: { amount: 552000, currency: DKK, period: yearly }   # Pay Limit Scheme 2026 (perkiraan, cek nyidanmark.dk)
     tokens: [copenhagen, aarhus, odense]
   germany:
     indeed: germany
@@ -111,6 +116,7 @@ countries:
     indeed: australia
     location: Australia
     sponsor: required
+    min_salary: { amount: 79423, currency: AUD, period: yearly }   # Core Skills Income Threshold sejak 1 Jul 2026 (visa 482)
     tokens: [sydney, melbourne, brisbane, perth, adelaide, canberra]
   new_zealand:
     indeed: new zealand
@@ -160,9 +166,10 @@ extra_searches: []
 linkedin:
   enabled: true
   max_minutes: 3              # batas waktu listing LinkedIn per run
-  hours_old: 30               # lebih longgar dari Indeed karena tiap kombinasi baru dikunjungi lagi setelah beberapa run
+  hours_old: 72               # lebih longgar dari Indeed: LinkedIn lambat, tiap kombinasi baru dikunjungi lagi setelah beberapa run
   results_per_search: 25
   max_descriptions: 25        # batas pengambilan deskripsi per run (tiap job = 1 request ke LinkedIn)
+  queue_hours: 72             # job yang lolos tahap 1 tapi belum sempat diambil deskripsinya masuk antrean, dibuang kalau lebih tua dari ini
   queries:
     - '("operations coordinator" OR "operations associate" OR "operations analyst" OR "business support" OR "business operations" OR "project coordinator" OR "project officer" OR "supply chain coordinator")'
     - '("business development" OR "market research" OR "market entry" OR "international operations" OR "sustainability coordinator" OR "production planner" OR "AI operations")'
@@ -179,6 +186,7 @@ companies:
   greenhouse: []              # contoh: [intercom, workhuman]
   lever: []
   ashby: []
+  smartrecruiters: []         # API publik resmi; identifier = bagian URL jobs.smartrecruiters.com/<identifier>
 
   # WORKDAY (banyak company besar). API internal, tidak resmi -> bisa berubah sewaktu-waktu.
   # Cara: buka career page company -> klik daftar job -> copy URL sampai nama site-nya:
@@ -188,6 +196,54 @@ companies:
   workday_search: [operations, coordinator, project, business, "supply chain", production, planning, sustainability, quality, analyst]   # dicari di server Workday
   workday_max_pages: 2        # x20 job per istilah pencarian
   workday_max_details: 60     # batas job BARU yang diambil detailnya per run (tiap job = 1 request)
+
+
+# ═════════ 4b. SUMBER TAMBAHAN: portal remote, agregator lokal, Bayt, daftar sponsor resmi ═════════
+# Semuanya melewati filter keras & skor yang SAMA dengan Indeed/LinkedIn. Sumber yang gagal tidak mematikan run.
+feeds:
+  enabled: true
+  max_minutes: 3                 # batas waktu total bagian ini per run
+  max_age_days: 7
+  # Portal remote (tanpa key, API publik). Hapus nama yang tidak mau. Remote hanya lolos kalau worldwide / negara targetmu.
+  boards: [remoteok, jobicy, himalayas, weworkremotely, arbeitnow]
+  skip_seniority: [senior, lead, principal, executive, director, head, vp]
+  himalayas_queries: ["operations coordinator", "project coordinator", "project officer", "business support", "virtual assistant", "supply chain", "business development", "market research", "sustainability", "program coordinator"]
+  himalayas_pages: 1
+  jobicy_tags: [operations, "project coordinator", "virtual assistant", "business support", "supply chain", sustainability]
+  wwr_feeds: [remote-management-and-finance-jobs, remote-customer-support-jobs, all-other-remote-jobs, remote-sales-and-marketing-jobs]
+  arbeitnow_pages: 2
+
+  # Agregator lokal per negara. OPSIONAL: aktif otomatis kalau secret-nya kamu isi (gratis), kalau tidak diisi dilewati.
+  # Adzuna: ADZUNA_APP_ID + ADZUNA_APP_KEY (developer.adzuna.com) -> UK, NL, DE, AU, NZ, IT, ES, CH
+  adzuna:
+    enabled: true
+    countries: { uk: gb, netherlands: nl, germany: de, australia: au, new_zealand: nz, italy: it, spain: es, switzerland: ch }
+    queries: ["operations coordinator", "project officer", "business support"]
+    max_days_old: 3
+  # Jooble: JOOBLE_KEY (jooble.org/api/about) -> negara yang tidak ada di Adzuna: Indonesia, Malaysia, Irlandia, Gulf, Nordik, Yunani
+  jooble:
+    enabled: true
+    locations: { indonesia: Indonesia, malaysia: Malaysia, ireland: Ireland, saudi_arabia: "Saudi Arabia", qatar: Qatar, kuwait: Kuwait, norway: Norway, sweden: Sweden, denmark: Denmark, greece: Greece }
+    queries: ["operations coordinator", "project officer", "business support"]
+    max_days_old: 3
+
+# Bayt (portal Timur Tengah) lewat JobSpy, tanpa key.
+bayt:
+  enabled: true
+  countries: { saudi_arabia: "Saudi Arabia", qatar: Qatar, kuwait: Kuwait }
+  queries: ["operations coordinator", "project coordinator", "business support", "supply chain coordinator"]
+  results_per_search: 20
+  hours_old: 72
+  max_minutes: 2
+
+# Daftar sponsor resmi pemerintah (UK: Register of Licensed Sponsors; NL: IND recognised sponsors).
+# Company ada di daftar -> skor naik + label "terdaftar". UK: tidak ada & deskripsi diam soal sponsor -> skor turun.
+sponsor_register:
+  enabled: true
+  bonus: 15
+  penalty: 10
+  strict_countries: []           # isi [uk] untuk MEMBUANG job dari company yang tidak terdaftar (lebih ketat; risiko nama beda)
+  # Catatan: daftar Belanda (IND) di webnya hanya tampil sebagian, jadi NL hanya dapat BONUS (tanpa penalti/strict).
 
 
 # ═════════ 5. FILTER KERAS (gagal satu = langsung dibuang) ═════════
@@ -211,6 +267,9 @@ filters:
     - general manager
     - managing director
     - senior
+    - snr
+    - mid-senior
+    - "mid senior"
     - sr.
     - sr
     - intern
@@ -296,6 +355,41 @@ filters:
 
   # SIM / kendaraan sendiri: dibuang KECUALI disebut desirable / nice to have / preferred / a plus
   exclude_unless_soft:
+    # level senior / wajib pengalaman memimpin: dibuang KECUALI disebut desirable / nice to have / a plus
+    - "leadership experience"
+    - "proven leadership"
+    - "leadership track record"
+    - "leadership background"
+    - "experience leading team*"
+    - "experience leading people"
+    - "experience in leading team*"
+    - "experience in leading people"
+    - "experience managing team*"
+    - "experience managing people"
+    - "experience managing staff"
+    - "experience managing direct reports"
+    - "experience of managing team*"
+    - "experience of managing people"
+    - "experience of leading team*"
+    - "people management experience"
+    - "line management experience"
+    - "team management experience"
+    - "team leadership experience"
+    - "supervisory experience"
+    - "managerial experience"
+    - "senior level role"
+    - "senior-level role"
+    - "senior level position"
+    - "senior-level position"
+    - "senior level hire"
+    - "senior-level hire"
+    - "senior position"
+    - "senior role"
+    - "senior leadership position"
+    - "mid-senior"
+    - "mid senior"
+    - "seniority level: senior"
+    - "seniority level senior"
     - driving licen*
     - driver's licen*
     - drivers licen*
@@ -319,9 +413,89 @@ filters:
     - terms: [management trainee, mt program, officer development program, management development program, future leaders program, management associate program]
       only_in: [indonesia]
 
-  # Pembatas AI: kalau judulnya "AI" tapi deskripsinya penuh stack teknis (> technical_max kata ini), dibuang.
-  technical_max: 1
-  technical_terms: [pytorch, tensorflow, "deep learning", kubernetes, docker, "ci/cd", "software development", backend, mlops, "fine-tuning", "model training", "scikit-learn", "neural network*", "computer science degree", "software engineering"]
+  # KEYWORD TEKNIKAL: satu saja muncul di deskripsi -> job dibuang, KECUALI disebut "desirable / nice to have / a plus".
+  # (technical_max: 0 = tanpa toleransi. Naikkan ke 1 kalau terasa terlalu ketat.)
+  technical_max: 0
+  technical_terms:
+    - python
+    - "java developer*"
+    - "java programming"
+    - "core java"
+    - "java ee"
+    - "spring boot"
+    - javascript
+    - typescript
+    - "c++"
+    - "c#"
+    - golang
+    - ruby
+    - php
+    - scala
+    - reactjs
+    - "react.js"
+    - "react native"
+    - angular
+    - "node.js"
+    - sql
+    - mysql
+    - postgres*
+    - nosql
+    - mongodb
+    - aws
+    - azure
+    - gcp
+    - "google cloud"
+    - terraform
+    - ansible
+    - jenkins
+    - git
+    - github
+    - api
+    - apis
+    - "rest api*"
+    - microservice*
+    - etl
+    - "data pipeline*"
+    - "data engineer*"
+    - "data warehouse*"
+    - snowflake
+    - airflow
+    - pyspark
+    - "apache spark"
+    - hadoop
+    - tableau
+    - looker
+    - "machine learning"
+    - "deep learning"
+    - nlp
+    - "computer vision"
+    - pytorch
+    - tensorflow
+    - "scikit-learn"
+    - "neural network*"
+    - "fine-tuning"
+    - "model training"
+    - mlops
+    - devops
+    - kubernetes
+    - docker
+    - "ci/cd"
+    - linux
+    - "cloud infrastructure"
+    - cybersecurity
+    - "penetration testing"
+    - firmware
+    - "embedded systems"
+    - "plc programming"
+    - scada
+    - autocad
+    - solidworks
+    - "software development"
+    - "software engineering"
+    - backend
+    - frontend
+    - "computer science degree"
+    - "degree in computer science"
 
 
 # ═════════ 6. SPONSOR & WORK PERMIT ═════════
@@ -344,9 +518,13 @@ remote:
 # ═════════ 8. INDUSTRI YANG DIHINDARI ═════════
 industry:
   # dicek pada JUDUL + NAMA COMPANY
-  exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll]
+  exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
+      investment*, "asset management", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
+      microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
-  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, cpa, "chartered accountant*", "qualified accountant*"]
+  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, cpa, "chartered accountant*", "qualified accountant*",
+      "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
+      "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
 
 
 # ═════════ 9. PROFIL & SKOR "COCOK" (0-100) ═════════
@@ -368,7 +546,8 @@ profile:
     market research/entry/access, business development, international/global operations or strategy, sustainability coordination,
     in FMCG, agriculture, horticulture, food manufacturing, retail, wholesale, consulting, MNE/SME.
     AI roles: ONLY non-technical AI operations (data quality, evaluation, annotation, AI project/program coordination, AI adoption support).
-    Reject anything needing programming, ML engineering, data science or a computer science degree.
+    Reject anything needing programming, SQL/Python, ML engineering, data science, IT/infrastructure skills or a computer science/engineering degree.
+    The candidate is a NON-CODER: any role whose core duties are technical/coding/IT is a poor fit.
     Avoid industries: alcohol, pork, gambling, banking/finance/tax/law, medical/pharma, pure engineering, construction, insurance.
     Full-time or contract only. Strong plus: sponsorship, relocation package, willingness to travel is fine.
     Soft skills are generic; weigh the technical skills above.
@@ -381,6 +560,9 @@ profile:
 scoring:
   min_score_rules: 50          # ambang kirim kalau TANPA Gemini
   min_score_ai: 60             # ambang kirim kalau Gemini aktif
+  # Tier 'MUNGKIN cocok': skor di bawah ambang kirim tapi di atas angka ini -> dikirim sebagai 1 digest ringkas (bukan kartu).
+  min_score_maybe: 38          # 0 = matikan tier ini
+  min_score_ai_maybe: 48       # sama, untuk skor dari Gemini
   use_gemini: true             # false = matikan Gemini walau secret ada
   # Dicoba berurutan. Kalau semua ditolak, radar otomatis mencari model flash yang tersedia di akunmu.
   gemini_models: [gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash]
@@ -392,7 +574,9 @@ scoring:
 
 # ═════════ 10. TELEGRAM ═════════
 telegram:
-  max_messages_per_run: 25     # sisanya dikirim ringkas dalam 1 pesan (tidak hilang)
+  max_messages_per_run: 25     # kartu lengkap per run; sisanya dikirim sebagai digest ringkas (beberapa pesan, tidak ada yang hilang)
+  max_digest_items: 60         # batas job di digest 'cocok lainnya' per run (kelebihannya muncul di run berikutnya)
+  max_maybe_items: 40          # batas job di digest 'mungkin cocok' per run
   alert_on_errors: true        # kabari kalau sumber gagal (hanya kalau berubah, tidak spam)
   daily_summary: true          # 1 pesan "radar masih hidup" per hari
   summary_hour_utc: 6          # dikirim di run pertama setelah jam ini (UTC). 6 = run 06:17 UTC
