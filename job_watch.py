@@ -13,8 +13,10 @@ Mode (env MODE atau --mode):
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import html
+import io
 import json
 import os
 import random
@@ -24,8 +26,10 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
+from xml.etree import ElementTree as ET
 
 import requests
 import yaml
@@ -49,6 +53,32 @@ SOFT_RX = re.compile(
     r"(?<!\w)(?:desirable|desired|nice[- ]to[- ]have|preferred|preferably|advantage\w*|a plus|plus|bonus|asset|"
     r"beneficial|helpful|optional|ideally|would be|an added|not (?:required|essential|mandatory|necessary))(?!\w)"
 )
+NEGATOR = re.compile(r"(?<!\w)(?:no|not|never|without|unable|cannot|nor|unfortunately)(?!\w)|n't(?!\w)", re.I)
+NEG_SPONSOR_RX = re.compile(
+    r"(?<!\w)(?:no|not|never|without|unable|cannot|can't|won't|unfortunately)(?!\w)"
+    r"(?:\s+(?!but\b|however\b|although\b|and\b|only\b)[\w'-]+){0,4}"
+    r"\s+(?:(?:visa|work|permit|company|employer|any)\s+)*sponsor\w*", re.I)
+NEG_AFTER_RX = re.compile(
+    r"sponsor\w*(?:\s+[\w'-]+){0,3}?\s+(?:is |are |will be |be )?not\s+(?:available|offered|provided|possible|supported|considered)", re.I)
+
+
+def sponsor_signals(R, text: str):
+    """-> (neg, pos, work_auth). Positif yang didahului negasi dalam kalimat yang sama ('no company sponsorship is available') TIDAK dihitung."""
+    neg = hits(R.sp_neg, text)
+    for rx in (NEG_SPONSOR_RX, NEG_AFTER_RX):
+        m = rx.search(text)
+        if m:
+            neg.append(m.group(0)[:60])
+    pos = []
+    for t, rx in R.sp_pos:
+        for m in rx.finditer(text):
+            pre = re.split(r"[.;:!?,\n]|(?<!\w)(?:but|however|although|though|and|yet)(?!\w)", text[max(0, m.start() - 45): m.start()])[-1]
+            if not NEGATOR.search(pre):
+                pos.append(t)
+                break
+    return neg, pos, hits(R.workauth, text)
+
+
 LANG_LEAD = (r"(?:fluen\w*|native|mother[- ]tongue|proficien\w*|advanced|excellent|strong|good|working|"
              r"business(?:[- ]level)?|professional|full|written|spoken|verbal|conversational|command of|"
              r"knowledge of|speak\w*|ability to speak|c1|c2|b2)")
@@ -185,6 +215,7 @@ class Job:
     reasons: list = field(default_factory=list)
     risks: list = field(default_factory=list)
     matched: list = field(default_factory=list)
+    added: str = ""
 
     def keys(self) -> list:
         return [
@@ -349,9 +380,12 @@ def min_years(text: str) -> int:
             continue
         ctx = text[max(0, m.start() - 45): m.end() + 90]
         if "experience" in ctx or re.search(r"\bexp\b", ctx):
-            best = max(best, int(m.group(1)))
+            n = int(m.group(1))
+            if n < 15:                                      # >= 15 tahun = promosi company ("30 years of experience"), bukan syarat
+                best = max(best, n)
     for m in YEARS_ID.finditer(text):
-        best = max(best, int(m.group(1)))
+        if int(m.group(1)) < 15:
+            best = max(best, int(m.group(1)))
     return best
 
 
@@ -369,7 +403,7 @@ def monthly_range(j: Job):
 
 def hard_filter(job: Job, R: Rules, pre: bool = False):
     """-> (lolos, alasan, boleh_dicoba_lagi). Mengisi job.country, job.sponsor, job.matched."""
-    title, desc, company = norm(job.title), norm(job.description), norm(job.company)
+    title, desc, company = norm(job.title), norm(job.description)[:60000], norm(job.company)   # batas pemindaian: satu posting raksasa tidak menahan run
     text = title + " " + desc
     if len(desc) < 50 and not pre:
         return False, "deskripsi kosong/gagal diambil (dicoba lagi run berikutnya)", True
@@ -400,7 +434,7 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
         return False, f"exclude: '{h[0]}'", False
     h = hits_unless_soft(R.unless_soft, text)
     if h:
-        return False, f"syarat tidak terpenuhi (SIM/kendaraan): '{h[0]}'", False
+        return False, f"syarat tidak terpenuhi (SIM/kendaraan/senior/leadership): '{h[0]}'", False
     if R.include_any and not hits(R.include_any, text):
         return False, "tidak ada keyword include", False
 
@@ -421,11 +455,11 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
         if y > R.max_years:
             return False, f"minta pengalaman {y}+ tahun", False
     if R.tech_max is not None:
-        t = hits(R.tech, desc)
+        t = hits_unless_soft(R.tech, desc)
         if len(t) > int(R.tech_max):
             return False, f"terlalu teknikal: {t[:3]}", False
 
-    neg, pos, wa = hits(R.sp_neg, text), hits(R.sp_pos, text), hits(R.workauth, text)
+    neg, pos, wa = sponsor_signals(R, text)
     mode = R.mode(cc)
     job.sponsor = "tidak tersedia" if neg else ("disebut" if pos else "tidak disebut")
     remote_exempt = remote and bool((R.countries.get(cc) or {}).get("remote_ok"))
@@ -446,8 +480,9 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     if ms:
         rng = monthly_range(job)
         if rng and (not job.sal_cur or job.sal_cur.upper() == str(ms.get("currency", "")).upper()):
-            if rng[1] < float(ms.get("amount", 0)):
-                return False, f"gaji maks {rng[1]:,.0f} < minimum {float(ms['amount']):,.0f}", False
+            need = float(ms.get("amount", 0)) / (12 if norm(ms.get("period")) in ("yearly", "year", "annual") else 1)
+            if rng[1] < need:                               # range yang MENGANDUNG batas tetap lolos; tanpa angka juga lolos
+                return False, f"gaji maks {rng[1]:,.0f} < minimum {need:,.0f} per bulan", False
 
     job.matched = pos[:4]
     return True, "", False
@@ -595,7 +630,7 @@ def build_li_searches(cfg: dict) -> list:
     return out
 
 
-def _scrape_batch(searches, start, deadline, sites, results, hours, fetch_desc, errors, counts, dead):
+def _scrape_batch(searches, start, deadline, sites, results, hours, fetch_desc, errors, counts, dead, gap=None, retry_429=False):
     """-> (jobs, jumlah_pencarian_dijalankan). Situs yang error dimatikan untuk sisa run (hemat menit Actions)."""
     n = len(searches)
     out, done, start = [], 0, start % n
@@ -619,24 +654,29 @@ def _scrape_batch(searches, start, deadline, sites, results, hours, fetch_desc, 
                       country_indeed=s.get("country") or "ireland", fetch_description=fetch_desc)
             if s.get("remote") and site != "linkedin":      # LinkedIn mengabaikan is_remote
                 kw["is_remote"] = True
+            def attempt():
+                d = scrape_jobs(**kw)
+                msgs = [str(m) for m in ((getattr(d, "attrs", None) or {}).get("errors") or {}).values() if m]
+                return d, msgs                              # JobSpy 1.4: error tidak di-raise, disimpan di attrs
             try:
-                df = scrape_jobs(**kw)
+                df, msgs = attempt()
+                if retry_429 and any("429" in m for m in msgs):
+                    pause(45)                               # 429 biasanya reda dalam ~1 menit
+                    df, msgs = attempt()
             except Exception as e:
                 errors.setdefault(site, f"{s['label']}: {type(e).__name__}: {str(e)[:140]}")
                 dead.add(site)
                 continue
-            try:                                            # JobSpy 1.4: error tidak di-raise, disimpan di attrs
-                for st_site, msg in ((getattr(df, "attrs", None) or {}).get("errors") or {}).items():
-                    if msg:
-                        errors.setdefault(clean(st_site) or site, f"{s['label']}: {str(msg)[:140]}")
-                        dead.add(site)
-            except Exception:
-                pass
+            for m in msgs:
+                errors.setdefault(site, f"{s['label']}: {m[:140]}")
+                dead.add(site)
             if df is None or len(df) == 0:
                 continue
             rows = df.to_dict("records")
             counts[site] = counts.get(site, 0) + len(rows)
             out.extend(row_to_job(r, site, s.get("ckey")) for r in rows)
+        if gap and not all(x in dead for x in sites):
+            pause(random.uniform(*gap))                     # jeda antar pencarian supaya tidak kena 429
     return out, done
 
 
@@ -662,7 +702,8 @@ def fetch_linkedin(cfg: dict, start: int, errors: dict, counts: dict, dead: set)
     li = cfg.get("linkedin") or {}
     deadline = time.time() + float(li.get("max_minutes", 3)) * 60
     jobs, done = _scrape_batch(searches, start, deadline, ["linkedin"], int(li.get("results_per_search", 25)),
-                               int(li.get("hours_old", 30)), False, errors, counts, dead)
+                               int(li.get("hours_old", 72)), False, errors, counts, dead,
+                               gap=(6, 12), retry_429=True)
     return jobs, (start % n + done) % n, done, n
 
 
@@ -868,6 +909,21 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list
             continue
         counts["workday"] = counts.get("workday", 0) + n
         out.extend(jobs)
+    sr_budget = {"details": int(c.get("workday_max_details") or 60)}
+    for slug in c.get("smartrecruiters") or []:
+        slug = clean(slug)
+        if not slug:
+            continue
+        try:
+            jobs = _smartrecruiters(slug, c, seen_fn, sr_budget, title_any, max_age)
+        except NotFound:
+            errors[f"smartrecruiters/{slug}"] = "identifier tidak ditemukan / tidak ada lowongan"
+            continue
+        except Exception as e:
+            errors[f"smartrecruiters/{slug}"] = f"{type(e).__name__}: {str(e)[:140]}"
+            continue
+        counts["smartrecruiters"] = counts.get("smartrecruiters", 0) + len(jobs)
+        out.extend(jobs)
     for ats, fn in ATS.items():
         for slug in c.get(ats) or []:
             slug = clean(slug)
@@ -888,6 +944,439 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list
                 if max_age and j.posted and (now - j.posted) > timedelta(days=max_age):
                     continue
                 out.append(j)
+    return out
+
+
+# ───────────────────────────── SUMBER 3: portal remote, agregator lokal, Bayt ─────────────────────────────
+COUNTRY_NAME = {"ie": "Ireland", "gb": "United Kingdom", "uk": "United Kingdom", "nl": "Netherlands", "de": "Germany",
+                "ch": "Switzerland", "es": "Spain", "it": "Italy", "no": "Norway", "se": "Sweden", "dk": "Denmark",
+                "gr": "Greece", "is": "Iceland", "au": "Australia", "nz": "New Zealand", "sa": "Saudi Arabia",
+                "qa": "Qatar", "kw": "Kuwait", "id": "Indonesia", "my": "Malaysia"}
+PERIOD = {"annual": "yearly", "annually": "yearly", "year": "yearly", "yearly": "yearly", "month": "monthly",
+          "monthly": "monthly", "hour": "hourly", "hourly": "hourly", "week": "weekly", "weekly": "weekly",
+          "day": "daily", "daily": "daily"}
+
+
+def scrub(msg: str) -> str:
+    for k in ("ADZUNA_APP_KEY", "ADZUNA_APP_ID", "JOOBLE_KEY"):
+        v = os.getenv(k, "").strip()
+        if v:
+            msg = msg.replace(v, "***")
+    return msg
+
+
+def _epoch(v):
+    try:
+        v = float(v)
+        return datetime.fromtimestamp(v, tz=timezone.utc) if v > 0 else None
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _sal(lo, hi, cur, per):
+    lo, hi = (num(lo) or None), (num(hi) or None)
+    if not (lo or hi):
+        return None, None, "", ""
+    return lo, hi, clean(cur).upper(), PERIOD.get(clean(per).lower(), "")
+
+
+def _tags(s: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html.unescape(clean(s)))).strip()
+
+
+def _remoteok(fc, deadline):
+    r = http_get("https://remoteok.com/api")
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    out = []
+    for it in r.json():
+        if not isinstance(it, dict) or not it.get("position"):
+            continue
+        loc = clean(it.get("location")) or "Worldwide"
+        lo, hi, cur, per = _sal(it.get("salary_min"), it.get("salary_max"), "USD", "yearly")
+        out.append(Job(source="remoteok", title=clean(it["position"]), company=clean(it.get("company")) or "?",
+                       location="Remote – " + loc, url=clean(it.get("url") or it.get("apply_url")),
+                       description=f"Location: {loc}. " + strip_html(it.get("description")),
+                       posted=_epoch(it.get("epoch")), remote=True, sal_min=lo, sal_max=hi, sal_cur=cur, sal_int=per))
+    return out
+
+
+def _jobicy(fc, deadline):
+    skip = {norm(x) for x in fc.get("skip_seniority") or []}
+    out = []
+    for tag in fc.get("jobicy_tags") or []:
+        if time.time() > deadline:
+            break
+        r = http_get(f"https://jobicy.com/api/v2/remote-jobs?count=50&tag={quote_plus(clean(tag))}")
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        for it in r.json().get("jobs") or []:
+            if not it.get("jobTitle") or norm(it.get("jobLevel")) in skip:
+                continue
+            geo = clean(it.get("jobGeo")) or "Worldwide"
+            lo, hi, cur, per = _sal(it.get("salaryMin"), it.get("salaryMax"), it.get("salaryCurrency"), it.get("salaryPeriod"))
+            out.append(Job(source="jobicy", title=clean(it["jobTitle"]), company=clean(it.get("companyName")) or "?",
+                           location="Remote – " + geo, url=clean(it.get("url")),
+                           description=f"Location: {geo}. " + strip_html(it.get("jobDescription") or it.get("jobExcerpt")),
+                           posted=parse_dt(it.get("pubDate")), remote=True, job_type=it.get("jobType"),
+                           sal_min=lo, sal_max=hi, sal_cur=cur, sal_int=per))
+    return out
+
+
+def _himalayas(fc, deadline):
+    skip = {norm(x) for x in fc.get("skip_seniority") or []}
+    out = []
+    for q in fc.get("himalayas_queries") or []:
+        for page in range(1, max(1, int(fc.get("himalayas_pages") or 1)) + 1):
+            if time.time() > deadline:
+                return out
+            r = http_get(f"https://himalayas.app/jobs/api/search?q={quote_plus(clean(q))}&sort=recent&page={page}")
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code}")
+            jobs = r.json().get("jobs") or []
+            for it in jobs:
+                if not it.get("title") or any(norm(s) in skip for s in it.get("seniority") or []):
+                    continue
+                geo = ", ".join(clean(x) for x in it.get("locationRestrictions") or []) or "Worldwide"
+                lo, hi, cur, per = _sal(it.get("minSalary"), it.get("maxSalary"), it.get("currency"), it.get("salaryPeriod"))
+                out.append(Job(source="himalayas", title=clean(it["title"]), company=clean(it.get("companyName")) or "?",
+                               location="Remote – " + geo, url=clean(it.get("guid") or it.get("applicationLink")),
+                               description=f"Location: {geo}. " + strip_html(it.get("description") or it.get("excerpt")),
+                               posted=_epoch(it.get("pubDate")), remote=True, job_type=it.get("employmentType"),
+                               sal_min=lo, sal_max=hi, sal_cur=cur, sal_int=per))
+            if len(jobs) < 20:
+                break
+    return out
+
+
+def _wwr(fc, deadline):
+    out = []
+    for slug in fc.get("wwr_feeds") or []:
+        if time.time() > deadline:
+            break
+        r = http_get(f"https://weworkremotely.com/categories/{clean(slug)}.rss")
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        for it in ET.fromstring(r.text).iter("item"):
+            t = clean(it.findtext("title"))
+            comp, _, title = t.partition(": ")
+            if not title:
+                comp, title = "?", t
+            geo = " ".join(x for x in (clean(it.findtext("region")), clean(it.findtext("country"))) if x) or "Worldwide"
+            try:
+                posted = parsedate_to_datetime(clean(it.findtext("pubDate")))
+            except Exception:
+                posted = None
+            out.append(Job(source="weworkremotely", title=title, company=comp,
+                           location="Remote – " + geo, url=clean(it.findtext("link") or it.findtext("guid")),
+                           description=f"Location: {geo}. " + strip_html(it.findtext("description")),
+                           posted=posted, remote=True, job_type=it.findtext("type")))
+    return out
+
+
+def _arbeitnow(fc, deadline):
+    out = []
+    for p in range(1, max(1, int(fc.get("arbeitnow_pages") or 2)) + 1):
+        if time.time() > deadline:
+            break
+        r = http_get(f"https://www.arbeitnow.com/api/job-board-api?page={p}")
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        for it in r.json().get("data") or []:
+            if not it.get("title"):
+                continue
+            loc = clean(it.get("location"))
+            out.append(Job(source="arbeitnow", title=clean(it["title"]), company=clean(it.get("company_name")) or "?",
+                           location=f"{loc}, Germany" if loc else "Germany", url=clean(it.get("url")),
+                           description=strip_html(it.get("description")), posted=_epoch(it.get("created_at")),
+                           remote=bool(it.get("remote")), fallback_country="germany"))
+    return out
+
+
+ADZUNA_CUR = {"gb": "GBP", "au": "AUD", "nz": "NZD", "ch": "CHF"}
+
+
+def _adzuna(fc, deadline):
+    ad = fc.get("adzuna") or {}
+    app_id, app_key = os.getenv("ADZUNA_APP_ID", "").strip(), os.getenv("ADZUNA_APP_KEY", "").strip()
+    if not ad.get("enabled", True) or not (app_id and app_key):
+        return None                                         # tidak aktif (key belum diisi)
+    out = []
+    for ckey, code in (ad.get("countries") or {}).items():
+        for q in ad.get("queries") or []:
+            if time.time() > deadline:
+                return out
+            r = http_get(f"https://api.adzuna.com/v1/api/jobs/{clean(code)}/search/1?app_id={app_id}&app_key={app_key}"
+                         f"&results_per_page=50&what={quote_plus(clean(q))}&max_days_old={int(ad.get('max_days_old', 3))}"
+                         "&sort_by=date&content-type=application/json")
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code} ({code})")
+            for it in r.json().get("results") or []:
+                if not it.get("title"):
+                    continue
+                disp = clean((it.get("location") or {}).get("display_name"))
+                pred = str(it.get("salary_is_predicted", "0")) == "1"
+                lo, hi, cur, per = _sal(None if pred else it.get("salary_min"), None if pred else it.get("salary_max"),
+                                        ADZUNA_CUR.get(clean(code).lower(), "EUR"), "yearly")
+                jt = [x for x in (clean(it.get("contract_time")).replace("_", ""), clean(it.get("contract_type"))) if x]
+                out.append(Job(source="adzuna", title=_tags(it["title"]), company=clean((it.get("company") or {}).get("display_name")) or "?",
+                               location=f"{disp}, {str(ckey).replace('_', ' ').title()}" if disp else str(ckey).replace("_", " ").title(),
+                               url=clean(it.get("redirect_url")), description=_tags(it.get("description")),
+                               posted=parse_dt(it.get("created")), job_type=jt or None, sal_min=lo, sal_max=hi,
+                               sal_cur=cur, sal_int=per, fallback_country=str(ckey).lower(),
+                               risks=["deskripsi ringkas dari agregator, cek posting aslinya"]))
+    return out
+
+
+def _jooble(fc, deadline):
+    jc = fc.get("jooble") or {}
+    key = os.getenv("JOOBLE_KEY", "").strip()
+    if not jc.get("enabled", True) or not key:
+        return None
+    since = (datetime.now(timezone.utc) - timedelta(days=int(jc.get("max_days_old", 3)))).strftime("%Y-%m-%d")
+    out = []
+    for ckey, loc in (jc.get("locations") or {}).items():
+        for q in jc.get("queries") or []:
+            if time.time() > deadline:
+                return out
+            r = http_post(f"https://jooble.org/api/{key}", {"keywords": clean(q), "location": clean(loc), "page": "1",
+                                                            "datecreatedfrom": since})
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code} ({loc})")
+            for it in r.json().get("jobs") or []:
+                if not it.get("title"):
+                    continue
+                disp = clean(it.get("location"))
+                out.append(Job(source="jooble", title=_tags(it["title"]), company=clean(it.get("company")) or "?",
+                               location=f"{disp}, {clean(loc)}" if disp and norm(clean(loc)) not in norm(disp) else (disp or clean(loc)),
+                               url=clean(it.get("link")), description=_tags(it.get("snippet")),
+                               posted=parse_dt(it.get("updated")), job_type=it.get("type"),
+                               fallback_country=str(ckey).lower(),
+                               risks=["deskripsi ringkas dari agregator, cek posting aslinya"]))
+    return out
+
+
+def fetch_feeds(cfg: dict, errors: dict, counts: dict) -> list:
+    fc = cfg.get("feeds") or {}
+    if not fc.get("enabled", True):
+        return []
+    deadline = time.time() + float(fc.get("max_minutes", 4)) * 60
+    title_any = [norm(x) for x in (fc.get("title_any") or (cfg.get("companies") or {}).get("title_any") or []) if norm(x)]
+    max_age = int(fc.get("max_age_days", 7))
+    boards = {norm(x) for x in fc.get("boards") or []}
+    tasks = [(k, fn) for k, fn in (("remoteok", _remoteok), ("jobicy", _jobicy), ("himalayas", _himalayas),
+                                    ("weworkremotely", _wwr), ("arbeitnow", _arbeitnow)) if k in boards]
+    tasks += [("adzuna", _adzuna), ("jooble", _jooble)]
+    now = datetime.now(timezone.utc)
+    out = []
+    for key, fn in tasks:
+        if time.time() > deadline:
+            break
+        try:
+            raw = fn(fc, deadline)
+        except Exception as e:
+            errors[key] = scrub(f"{type(e).__name__}: {str(e)[:140]}")
+            continue
+        if raw is None:
+            continue
+        counts[key] = counts.get(key, 0) + len(raw)
+        for j in raw:
+            if not j.url or not j.title:
+                continue
+            if title_any and not any(x in norm(j.title) for x in title_any):
+                continue
+            if max_age and j.posted and (now - j.posted) > timedelta(days=max_age):
+                continue
+            out.append(j)
+    return out
+
+
+def fetch_bayt(cfg: dict, errors: dict, counts: dict, dead: set) -> list:
+    """Bayt (Timur Tengah) lewat JobSpy: Saudi/Qatar/Kuwait."""
+    by = cfg.get("bayt") or {}
+    if not by.get("enabled"):
+        return []
+    qs = [clean(q) for q in by.get("queries") or [] if clean(q)]
+    searches = [dict(term=q, location=clean(loc), country=None, ckey=str(k).lower(), label=f"bayt {k}: {q[:30]}")
+                for k, loc in (by.get("countries") or {}).items() for q in qs]
+    if not searches:
+        return []
+    deadline = time.time() + float(by.get("max_minutes", 3)) * 60
+    jobs, _ = _scrape_batch(searches, 0, deadline, ["bayt"], int(by.get("results_per_search", 20)),
+                            int(by.get("hours_old", 72)), True, errors, counts, dead, gap=(1, 3))
+    return jobs
+
+
+# ───────────────────────────── daftar sponsor resmi (UK, Belanda) ─────────────────────────────
+LEGAL_TOK = {"bv", "nv", "ltd", "limited", "plc", "llp", "llc", "inc", "gmbh", "ag", "sa", "holding", "holdings",
+             "group", "the", "uk", "nederland", "netherlands", "europe", "international", "ireland", "company", "co",
+             "corp", "corporation"}
+
+
+def org_key(name: str) -> str:
+    s = norm(name).replace("&", " and ")
+    s = re.sub(r"(?<!\w)[bn]\.\s?v\.?(?!\w)", " ", s)
+    s = re.sub(r"[^\w\s]", " ", s)
+    return " ".join(t for t in s.split() if t not in LEGAL_TOK)
+
+
+class Register:
+    def __init__(self, names):
+        self.prefixes = set()
+        for n in names:
+            toks = org_key(n).split()
+            for i in range(1, len(toks) + 1):
+                self.prefixes.add(" ".join(toks[:i]))
+
+    def match(self, company: str) -> bool:
+        k = org_key(company)
+        return len(k) >= 4 and k in self.prefixes
+
+
+UK_PAGE = "https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers"
+NL_PAGE = "https://ind.nl/en/public-register-recognised-sponsors/public-register-regular-labour-and-highly-skilled-migrants"
+
+
+def _load_uk() -> list:
+    page = http_get(UK_PAGE)
+    if page.status_code != 200:
+        raise RuntimeError(f"HTTP {page.status_code} (halaman daftar sponsor UK)")
+    m = re.search(r'https://assets\.publishing\.service\.gov\.uk/[^"\'<>\s]+\.csv', page.text)
+    if not m:
+        raise RuntimeError("link CSV daftar sponsor UK tidak ketemu (gov.uk mengubah halaman)")
+    r = http_get(m.group(0), tries=2)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code} (CSV sponsor UK)")
+    rows = csv.reader(io.StringIO(r.text.lstrip("﻿")))
+    header = [norm(h) for h in next(rows, [])]
+    iname = next((i for i, h in enumerate(header) if h.startswith("organisation")), 0)
+    iroute = header.index("route") if "route" in header else None
+    irate = next((i for i, h in enumerate(header) if "rating" in h), None)
+    names = []
+    for row in rows:
+        if len(row) <= iname:
+            continue
+        if iroute is not None and (len(row) <= iroute or "skilled worker" not in norm(row[iroute])):
+            continue
+        if irate is not None and len(row) > irate and "a rating" not in norm(row[irate]).replace("(premium)", "a rating"):
+            continue
+        names.append(row[iname])
+    if len(names) < 100:
+        raise RuntimeError("daftar sponsor UK terbaca terlalu sedikit (format CSV berubah?)")
+    return names
+
+
+def _load_nl() -> list:
+    from bs4 import BeautifulSoup
+    r = http_get(NL_PAGE)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code} (daftar sponsor IND)")
+    names = []
+    for tr in BeautifulSoup(r.text, "html.parser").find_all("tr"):
+        td = tr.find_all("td")
+        if len(td) >= 2 and re.fullmatch(r"\d{6,9}", td[-1].get_text(strip=True)):
+            names.append(td[0].get_text(" ", strip=True))
+    if len(names) < 100:
+        raise RuntimeError("daftar sponsor IND tidak terbaca (struktur halaman berubah?)")
+    return names
+
+
+REGISTERS = {"uk": _load_uk, "netherlands": _load_nl}
+REGISTER_COMPLETE = {"uk": True, "netherlands": False}   # halaman IND hanya menampilkan sebagian daftar -> NL: bonus saja
+
+
+def apply_registers(cfg: dict, cands: list, errors: dict) -> list:
+    """Company ada di daftar sponsor resmi -> bonus skor; tidak ada & deskripsi diam soal sponsor -> penalti."""
+    sr = cfg.get("sponsor_register") or {}
+    if not sr.get("enabled", True):
+        return cands
+    bonus, penalty = int(sr.get("bonus", 15)), int(sr.get("penalty", 10))
+    strict = {str(x).lower() for x in sr.get("strict_countries") or []}
+    cache: dict = {}
+    out = []
+    for j in cands:
+        if j.country not in REGISTERS:
+            out.append(j)
+            continue
+        if j.country not in cache:
+            try:
+                cache[j.country] = Register(REGISTERS[j.country]())
+            except Exception as e:
+                cache[j.country] = None
+                errors[f"daftar sponsor {j.country}"] = scrub(f"{type(e).__name__}: {str(e)[:140]} (dilewati, skor tanpa daftar)")
+        reg = cache[j.country]
+        if reg is None:
+            out.append(j)
+            continue
+        if reg.match(j.company):
+            if j.sponsor in ("", "tidak disebut"):
+                j.sponsor = "terdaftar di daftar sponsor resmi"
+            j.score = min(100, j.score + bonus)
+        elif j.sponsor == "tidak disebut" and REGISTER_COMPLETE.get(j.country):
+            if j.country in strict:
+                continue
+            j.score = max(0, j.score - penalty)
+            j.risks = list(j.risks) + ["company tidak ada di daftar sponsor resmi (atau namanya beda)"]
+        out.append(j)
+    return out
+
+
+# ── SmartRecruiters (API publik resmi, tanpa key)
+def _sr_count(slug: str) -> int:
+    r = http_get(f"https://api.smartrecruiters.com/v1/companies/{quote_plus(slug)}/postings?limit=1")
+    if r.status_code != 200:
+        return 0
+    return int(r.json().get("totalFound") or 0)
+
+
+def _smartrecruiters(slug: str, c: dict, seen_fn, budget: dict, title_any: list, max_age: int) -> list:
+    now = datetime.now(timezone.utc)
+    cand, offset = [], 0
+    for _ in range(5):
+        r = http_get(f"https://api.smartrecruiters.com/v1/companies/{quote_plus(slug)}/postings?limit=100&offset={offset}")
+        if r.status_code == 404:
+            raise NotFound(slug)
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        d = r.json()
+        items = d.get("content") or []
+        if offset == 0 and not items:
+            raise NotFound(slug)
+        for it in items:
+            title = clean(it.get("name"))
+            posted = parse_dt(it.get("releasedDate"))
+            if title_any and not any(x in norm(title) for x in title_any):
+                continue
+            if max_age and posted and (now - posted) > timedelta(days=max_age):
+                continue
+            cand.append((it, title, posted))
+        offset += 100
+        if offset >= int(d.get("totalFound") or 0):
+            break
+    out = []
+    for it, title, posted in cand:
+        url0 = f"https://jobs.smartrecruiters.com/{slug}/{clean(it.get('id'))}"
+        if seen_fn and seen_fn(url0):
+            continue
+        if budget["details"] <= 0:
+            continue
+        budget["details"] -= 1
+        loc = it.get("location") or {}
+        cc = clean(loc.get("country")).lower()
+        place = clean(loc.get("fullLocation")) or ", ".join(x for x in (clean(loc.get("city")), clean(loc.get("region"))) if x)
+        if cc in COUNTRY_NAME and norm(COUNTRY_NAME[cc]) not in norm(place):
+            place = f"{place}, {COUNTRY_NAME[cc]}" if place else COUNTRY_NAME[cc]
+        try:
+            dr = http_get(clean(it.get("ref")) or f"https://api.smartrecruiters.com/v1/companies/{quote_plus(slug)}/postings/{clean(it.get('id'))}")
+            det = dr.json() if dr.status_code == 200 else {}
+        except Exception:
+            det = {}
+        secs = ((det.get("jobAd") or {}).get("sections") or {})
+        desc = " ".join(strip_html((secs.get(k) or {}).get("text")) for k in
+                        ("jobDescription", "qualifications", "additionalInformation"))
+        out.append(Job(source="smartrecruiters", title=title, company=clean((it.get("company") or {}).get("name")) or slug,
+                       location=place, url=clean(det.get("postingUrl")) or url0, description=desc, posted=posted,
+                       remote=bool(loc.get("remote")), job_type=(it.get("typeOfEmployment") or {}).get("label")))
     return out
 
 
@@ -1093,10 +1582,31 @@ def fmt_job(j: Job) -> str:
     return "\n".join(lines)
 
 
+def digest_line(j: Job) -> str:
+    icon = "🟢" if j.score >= 80 else "🟡" if j.score >= 65 else "🟠"
+    sp = f" · 🛂 {esc(j.sponsor)}" if (j.sponsor == "disebut" or j.sponsor.startswith("terdaftar")) else ""
+    return f"{icon} {j.score} · <b>{esc(j.title)}</b> — {esc(j.company)} ({esc(j.country or '?')}){sp}\n{esc(j.url)}"
+
+
+def chunk_items(items: list, limit: int = 3400) -> list:
+    """Bagi daftar job ke beberapa pesan <= batas Telegram, tanpa ada yang terpotong."""
+    chunks, cur, size = [], [], 0
+    for j in items:
+        n = len(digest_line(j)) + 2
+        if cur and size + n > limit:
+            chunks.append(cur)
+            cur, size = [], 0
+        cur.append(j)
+        size += n
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 # ───────────────────────────── state ─────────────────────────────
 class State:
     def __init__(self):
-        self.d = {"seen": [], "last_errors": [], "last_summary": "", "cursor": 0, "li_cursor": 0,
+        self.d = {"seen": [], "last_errors": [], "last_summary": "", "cursor": 0, "li_cursor": 0, "li_queue": [],
                   "stats": {"sent": 0, "runs": 0, "scanned": {}, "searched": 0}}
         if STATE_FILE.exists():
             try:
@@ -1140,10 +1650,20 @@ def run(cfg: dict, dry: bool) -> int:
     comp_jobs = fetch_companies(cfg, errors, counts,                       # cepat, selalu jalan penuh
                                 seen_fn=lambda u: ("u:" + sha(canon_url(u))) in state.seen)
     dead: set = set()                                                      # situs yang error: dilewati sisa run
+    feed_jobs = fetch_feeds(cfg, errors, counts)                           # portal remote + agregator (Adzuna/Jooble bila ada key)
+    bayt_jobs = fetch_bayt(cfg, errors, counts, dead)                      # Saudi/Qatar/Kuwait
     js_jobs, cursor, searched, total = fetch_jobspy(cfg, int(state.d.get("cursor", 0)), errors, counts, dead)
     li_jobs, li_cursor, li_done, li_total = fetch_linkedin(cfg, int(state.d.get("li_cursor", 0)), errors, counts, dead)
     searched, total = searched + li_done, total + li_total
-    jobs = comp_jobs + js_jobs + li_jobs
+    queued = []
+    for q in state.d.get("li_queue") or []:                                # job LinkedIn yang lolos tahap 1 tapi belum sempat diambil deskripsinya
+        try:
+            queued.append(Job(source="linkedin", title=q["title"], company=q["company"], location=q.get("location", ""),
+                              url=q["url"], description="", posted=parse_dt(q.get("posted")),
+                              fallback_country=q.get("ckey"), added=q.get("added", "")))
+        except Exception:
+            continue
+    jobs = comp_jobs + feed_jobs + js_jobs + bayt_jobs + li_jobs + queued
 
     # ---- tahap 1: dedup + filter keras + skor aturan
     batch, cands, why, explain, li_pending = set(), [], Counter(), [], []
@@ -1151,7 +1671,7 @@ def run(cfg: dict, dry: bool) -> int:
     def evaluate(j: Job, pre: bool = False) -> bool:
         ok, reason, _retry = hard_filter(j, R, pre=pre)
         if not ok:
-            why[reason.split(":")[0].split("'")[0].strip()] += 1
+            why[re.sub(r"\s+", " ", re.sub(r"[\d,.+]+|'[^']*'", "", reason.split(":")[0])).strip() or reason[:40]] += 1
             explain.append(f"  ✗ {reason:<60} {j.title} — {j.company} [{j.country}]")
             return False
         if not pre:
@@ -1172,10 +1692,12 @@ def run(cfg: dict, dry: bool) -> int:
             continue
         evaluate(j)
 
+    queue_out: list = []
     if li_pending:
         li_cap = int((cfg.get("linkedin") or {}).get("max_descriptions", 25))
         li_pending.sort(key=lambda x: x.posted or datetime(1970, 1, 1, tzinfo=timezone.utc), reverse=True)
         fails = 0
+        done_ids: set = set()
         for j in li_pending[:li_cap]:
             det = linkedin_details(j.url)
             if det is None:
@@ -1185,6 +1707,7 @@ def run(cfg: dict, dry: bool) -> int:
                     break
                 continue
             fails = 0
+            done_ids.add(id(j))
             j.description = det.get("description") or ""
             if det.get("job_type"):
                 j.job_type = det["job_type"]
@@ -1193,6 +1716,19 @@ def run(cfg: dict, dry: bool) -> int:
                 state.add(j)                                # sudah dibaca & gugur: jangan ambil deskripsinya lagi
         if len(li_pending) > li_cap:
             why["linkedin ditunda (batas deskripsi per run)"] += len(li_pending) - li_cap
+        now_dt = datetime.now(timezone.utc)
+        max_h = int((cfg.get("linkedin") or {}).get("queue_hours", 72))
+        for j in li_pending:                                # yang belum terproses masuk antrean run berikutnya
+            if id(j) in done_ids:
+                continue
+            ref = j.posted or parse_dt(j.added) or now_dt
+            if (now_dt - ref) > timedelta(hours=max_h):
+                continue
+            queue_out.append(dict(title=j.title, company=j.company, location=j.location, url=j.url,
+                                  posted=j.posted.isoformat() if j.posted else None, ckey=j.fallback_country,
+                                  added=j.added or now_dt.isoformat()))
+        queue_out = queue_out[:400]
+    cands = apply_registers(cfg, cands, errors)
     cands.sort(key=lambda x: -x.score)
 
     # ---- tahap 2: Gemini (opsional)
@@ -1203,8 +1739,10 @@ def run(cfg: dict, dry: bool) -> int:
     cap = int(sc.get("gemini_max_per_run", 25))
     gate = int(sc.get("gemini_min_rule_score", 30))
     min_rules, min_ai = int(sc.get("min_score_rules", 50)), int(sc.get("min_score_ai", 60))
+    min_maybe = int(sc.get("min_score_maybe", 0))                       # 0 = tier 'mungkin cocok' mati
+    min_ai_maybe = int(sc.get("min_score_ai_maybe", max(0, min_ai - 12)))
     used = fails = 0
-    sendable, low_ai = [], []
+    sendable, maybe, low_ai = [], [], []
     for j in cands:
         use_ai = bool(gem and gem.alive)
         if use_ai and j.score < gate:
@@ -1228,18 +1766,23 @@ def run(cfg: dict, dry: bool) -> int:
         threshold = min_ai if j.scored_by == "ai" else min_rules
         if j.score >= threshold:
             sendable.append(j)
+        elif min_maybe and j.score >= (min_ai_maybe if j.scored_by == "ai" else min_maybe):
+            maybe.append(j)
         elif j.scored_by == "ai":
             low_ai.append(j)
     sendable.sort(key=lambda x: -x.score)
+    maybe.sort(key=lambda x: -x.score)
 
     # ---- dry-run: laporkan saja
     if dry:
         print("\n===== DRY-RUN (tidak ada yang dikirim/disimpan) =====")
         print(f"pencarian dijalankan: {searched} dari {total} kombinasi | diambil per sumber: {counts or '-'}")
         print(f"lolos filter keras: {len(cands)} | gugur: {sum(why.values())} {dict(why)}")
-        print(f"akan dikirim (skor aturan >= {min_rules}): {len(sendable)}")
+        print(f"akan dikirim (skor aturan >= {min_rules}): {len(sendable)} | 'mungkin cocok' (skor >= {min_maybe or '-'}): {len(maybe)}")
         for j in sendable:
             print(f"  ✓ {j.score:>3}  {j.title} — {j.company} [{j.country}] sponsor={j.sponsor or '-'} {j.matched}")
+        for j in maybe:
+            print(f"  ? {j.score:>3}  {j.title} — {j.company} [{j.country}] sponsor={j.sponsor or '-'}")
         print("\n--- alasan gugur ---")
         print("\n".join(explain[:300]) or "  (tidak ada)")
         for k, v in errors.items():
@@ -1254,16 +1797,31 @@ def run(cfg: dict, dry: bool) -> int:
             state.add(j)
             state.d["stats"]["sent"] += 1
             state.save()                                      # simpan progres per pesan
+    def send_digest(items: list, title: str, cap: int) -> int:
+        n_sent = 0
+        chunks = chunk_items(items[:cap])                     # lewat batas cap TIDAK ditandai terkirim -> muncul run berikutnya
+        for i, ch in enumerate(chunks, 1):
+            head_txt = f"{title} ({i}/{len(chunks)})" if len(chunks) > 1 else title
+            if tg.send(head_txt + "\n\n" + "\n\n".join(digest_line(x) for x in ch)):
+                for x in ch:
+                    state.add(x)
+                n_sent += len(ch)
+                state.save()
+        state.d["stats"]["sent"] += n_sent
+        return n_sent
+
     if extra:
-        lines = [f"➕ <b>{len(extra)} job cocok lainnya</b> (batas {max_msg} pesan/run):"]
-        for j in extra[:30]:
-            lines.append(f"{j.score} · {esc(j.title)} — {esc(j.company)}\n{esc(j.url)}")
-        if tg.send("\n\n".join(lines)):
-            for j in extra:
-                state.add(j)
-            state.d["stats"]["sent"] += len(extra)
+        send_digest(extra, f"➕ <b>{len(extra)} job cocok lainnya</b> (di atas batas {max_msg} kartu/run):",
+                    int(tgc.get("max_digest_items", 60)))
+    if maybe:
+        send_digest(maybe, f"🤔 <b>{len(maybe)} job MUNGKIN cocok</b> (skor {min_maybe}–{min_rules - 1}, cek cepat):",
+                    int(tgc.get("max_maybe_items", 40)))
     for j in low_ai:
         state.add(j)                                          # sudah dinilai AI & kurang cocok: jangan nilai ulang
+
+    if os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch" and not (sendable or maybe):
+        tg.send(f"✅ <b>Run manual selesai</b>: tidak ada job baru yang cocok.\n"
+                f"Diambil {sum(counts.values())} job, lolos filter {len(cands)}, pencarian {searched}/{total}.")
 
     # ---- statistik, alert error, ringkasan harian
     st = state.d["stats"]
@@ -1271,6 +1829,7 @@ def run(cfg: dict, dry: bool) -> int:
     st["searched"] += searched
     state.d["cursor"] = cursor
     state.d["li_cursor"] = li_cursor
+    state.d["li_queue"] = queue_out
     for k, v in counts.items():
         st["scanned"][k] = st["scanned"].get(k, 0) + v
     keys = sorted(errors)
@@ -1344,6 +1903,13 @@ def find_companies(names: str) -> int:
                     continue
                 if n > 0 or ats != "ashby":
                     found.append(f"{ats}: <code>{esc(slug)}</code> ({n} job)")
+        for slug in slugs:
+            try:
+                n = _sr_count(slug)
+            except Exception:
+                n = 0
+            if n > 0:
+                found.append(f"smartrecruiters: <code>{esc(slug)}</code> ({n} job)")
         if found:
             lines.append(f"✅ <b>{esc(raw)}</b> → " + " | ".join(found) + "\n   tambahkan slug ke config.yml di bagian companies")
         else:
