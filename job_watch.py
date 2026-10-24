@@ -310,6 +310,7 @@ class Rules:
         self.ww = ct(rm.get("worldwide"))
         self.rx_allowed = ct(list(rm.get("allowed_regions") or []) + [k.replace("_", " ") for k in self.countries]
                              + [t for c in self.countries.values() for t in (c.get("tokens") or [])])
+        self.rx_blocked = ct(rm.get("blocked_regions"))
         self.ind_cnt = ct(ind.get("count_terms"))
         self.ind_benign = [re.compile(r"(?<!\w)" + r"\s+".join(re.escape(x) if x != "*" else r"\w*" for x in re.split(r"(\*)", norm(t)) if x) + r"(?!\w)", re.I)
                            for t in ind.get("benign_phrases") or [] if norm(t)]
@@ -546,6 +547,10 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
         verdict = R.region_verdict(job.location)
         if verdict == "blocked":                            # lokasi terstruktur menang atas klaim "worldwide" di deskripsi
             return False, f"remote tapi wilayah tidak termasuk: '{clean(job.location)[:50]}'", False
+        if verdict != "ww":                                 # lokasi kosong/"Remote" tapi judul menyebut negara terlarang: "Executive Assistant (Bulacan, Philippines)"
+            tl = norm(job.title)
+            if hits(R.rx_blocked, tl) and not hits(R.rx_allowed, tl):
+                return False, "remote tapi judul menyebut wilayah yang tidak termasuk", False
     if remote:
         c = R.countries.get(cc) or {}
         if not c.get("remote_ok"):
