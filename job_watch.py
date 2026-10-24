@@ -1835,7 +1835,31 @@ def run(cfg: dict, dry: bool) -> int:
                                   added=j.added or now_dt.isoformat()))
         queue_out = queue_out[:400]
     cands = apply_registers(cfg, cands, errors)
+    spc = cfg.get("sponsorship") or {}
+    if spc.get("require_explicit", False):                  # negara wajib-sponsor: hanya job yang MENYEBUT sponsor / terdaftar di daftar resmi
+        skip = {str(x).lower() for x in spc.get("explicit_exempt") or []}
+        keep = []
+        for j in cands:
+            need = (R.mode(j.country) == "required" and j.country not in skip
+                    and not (is_remote_job(j) and (R.countries.get(j.country) or {}).get("remote_ok")))
+            if need and not (j.sponsor.startswith("disebut") or j.sponsor.startswith("terdaftar")):
+                why["sponsor tidak disebut (wajib disebut di negara sponsor)"] += 1
+                if len(explain) < 400:
+                    explain.append(f"sponsor tidak disebut (wajib di negara sponsor)   {j.title} — {j.company} [{j.country}]")
+                continue
+            keep.append(j)
+        cands = keep
     cands.sort(key=lambda x: -x.score)
+    uniq, seen_fp = [], set()                               # job sama di beberapa kota (company+judul+negara) -> satu saja
+    for j in cands:
+        fp = (norm(j.company), norm(j.title), j.country)
+        if fp in seen_fp and j.country:
+            if not dry:
+                state.add(j)                                # tandai agar tidak muncul lagi di run berikutnya
+            continue
+        seen_fp.add(fp)
+        uniq.append(j)
+    cands = uniq
 
     # ---- tahap 2: Gemini (opsional)
     gem = None
