@@ -46,7 +46,7 @@ T0 = time.time()
 DEFAULT_W = dict(
     title_target=40, title_weak=15, skill_each=5, skill_max=25, boost_each=8, boost_max=16,
     manager_title=-10, country_known=5, sponsor_pos_required=20, sponsor_pos_preferred=10,
-    sponsor_unknown_required=-10,
+    sponsor_unknown_required=-10, industry_hit=10, industry_none=-12,
 )
 JT_BAD = {"parttime", "internship", "intern", "temporary", "perdiem", "volunteer", "seasonal"}
 SOFT_RX = re.compile(
@@ -134,8 +134,18 @@ def hits(compiled, text: str) -> list:
     return [t for t, rx in compiled if rx.search(text)]
 
 
+SENT_BREAK = re.compile(r"[.;!?\n•·]")
+
+
 def soft_near(text: str, m, w: int = 70) -> bool:
-    return bool(SOFT_RX.search(text[max(0, m.start() - w): m.end() + w]))
+    """'a plus / desirable' hanya dihitung kalau ada di KALIMAT/BUTIR YANG SAMA (jangan bocor ke butir daftar berikutnya)."""
+    left = text[max(0, m.start() - w): m.start()]
+    right = text[m.end(): m.end() + w]
+    lb = [x.end() for x in SENT_BREAK.finditer(left)]
+    left = left[lb[-1]:] if lb else left
+    rb = SENT_BREAK.search(right)
+    right = right[:rb.start()] if rb else right
+    return bool(SOFT_RX.search(left + " " + text[m.start():m.end()] + " " + right))
 
 
 def hits_unless_soft(compiled, text: str) -> list:
@@ -292,10 +302,19 @@ class Rules:
                            rf"\s+(?:is\s+)?(?:required|mandatory|essential|a must|fluent|fluency|native|proficien\w*|speakers?|level))(?!\w)")
             self.lang[lg] = (title_rx, [a, b])
 
+        self.deg_block = ct(f.get("degree_blocked_fields"))
+        self.deg_ok = ct(f.get("degree_ok_fields"))
         self.sp_pos = ct(sp.get("positive"))
         self.sp_neg = ct(sp.get("negative"))
         self.workauth = ct(sp.get("work_auth"))
         self.ww = ct(rm.get("worldwide"))
+        self.rx_allowed = ct(list(rm.get("allowed_regions") or []) + [k.replace("_", " ") for k in self.countries]
+                             + [t for c in self.countries.values() for t in (c.get("tokens") or [])])
+        self.ind_cnt = ct(ind.get("count_terms"))
+        self.ind_benign = [re.compile(r"(?<!\w)" + r"\s+".join(re.escape(x) if x != "*" else r"\w*" for x in re.split(r"(\*)", norm(t)) if x) + r"(?!\w)", re.I)
+                           for t in ind.get("benign_phrases") or [] if norm(t)]
+        self.ind_min = int(ind.get("min_mentions", 3))
+        self.t_ind = ct((cfg.get("profile") or {}).get("target_industry_terms"))
         self.restrict = ct(rm.get("restrict"))
         self.ind_tc = ct(ind.get("exclude_title_company"))
         self.ind_desc = ct(ind.get("exclude_description"))
@@ -328,6 +347,16 @@ class Rules:
                 return k
         return None
 
+    def region_verdict(self, loc: str) -> str:
+        """Lokasi remote terstruktur dari portal -> 'ww' (worldwide) | 'ok' (wilayah yang diizinkan) | 'blocked' | 'unknown' (tanpa info)."""
+        s_ = re.sub(r"^remote[\s:–—\-|/,()]*", "", norm(loc))
+        toks = [t.strip() for t in re.split(r"[,;/|()]|\band\b|\bor\b|&|\s[–—]\s", s_) if t.strip()]
+        if not toks:
+            return "unknown"
+        if any(hits(self.ww, t) or re.search(r"(?<!\w)(?:worldwide|anywhere|global)(?!\w)", t) for t in toks):
+            return "ww"
+        return "ok" if any(hits(self.rx_allowed, t) for t in toks) else "blocked"
+
     def mode(self, cc):
         return (self.countries.get(cc) or {}).get("sponsor", "required") if cc in self.countries else None
 
@@ -359,6 +388,38 @@ def blocked_language(title: str, desc: str, R: Rules) -> str:
                 if not soft_near(text, m):
                     return lang
     return ""
+
+
+DEG_RX = re.compile(r"(?<!\w)(?:bachelor\w*|b\.?sc\.?|master\w*|m\.?sc\.?|degree|diploma|graduate|undergraduate|postgraduate|ph\.?d)(?!\w)[^.;\n]{0,60}?(?<!\w)(?:in|of)(?!\w)\s+([^.;\n]{0,220})", re.I)
+
+
+DEG_GENERIC_RX = re.compile(
+    r"(?<!\w)(?<!social )(?<!political )(?<!environmental )(?<!agricultural )(?<!management )(?<!landscape )(?<!business )(?<!food )"
+    r"(?:technical|scientific|science|stem|stem-related|quantitative|engineering)\s+(?:degree|bachelor\w*|master\w*|qualification|background)(?!\w)"
+    r"|(?<!\w)(?:degree|bachelor\w*|master\w*|qualification)\s+in\s+(?:a\s+|an\s+|any\s+)?(?:technical|scientific|science|stem|quantitative)\s+(?:field|discipline|subject|area)s?(?!\w)", re.I)
+
+
+def degree_mismatch(desc: str, R: Rules) -> str:
+    """Wajib degree di bidang lain (kimia, biologi, teknik, keuangan, dst.) dan tidak menyebut bidang yang cocok untukmu."""
+    found = ""
+    for m in DEG_GENERIC_RX.finditer(desc):                 # "any technical / science / STEM degree"
+        if soft_near(desc, m):
+            continue
+        rest = desc[m.end(): m.end() + 120]
+        rb = SENT_BREAK.search(rest)
+        if hits(R.deg_ok, norm(rest[:rb.start()] if rb else rest)):
+            continue                                        # "Bachelor of Science degree in Business" -> aman
+        found = found or norm(m.group(0))
+    for m in DEG_RX.finditer(desc):
+        if soft_near(desc, m):
+            continue
+        clause = norm(m.group(1))
+        if hits(R.deg_ok, clause):
+            return ""
+        b = hits(R.deg_block, clause)
+        if b and not found:
+            found = b[0]
+    return found
 
 
 def foreign_text(desc: str) -> bool:
@@ -429,6 +490,13 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     h = hits(R.ind_desc, desc)
     if h:
         return False, f"industri dihindari (deskripsi): '{h[0]}'", False
+    if R.ind_cnt:
+        d2 = desc
+        for rx in R.ind_benign:
+            d2 = rx.sub(" ", d2)
+        n_ind = sum(len(rx.findall(d2)) for _, rx in R.ind_cnt)
+        if n_ind >= R.ind_min:
+            return False, f"industri dihindari (deskripsi: {n_ind} kata kunci bank/asuransi/konstruksi/pharma)", False
     h = hits(R.phrase_ex, text)
     if h:
         return False, f"exclude: '{h[0]}'", False
@@ -448,6 +516,10 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     lg = blocked_language(title, desc, R)
     if lg:
         return False, f"wajib bahasa lokal: {lg}", False
+    if R.deg_block:
+        dg = degree_mismatch(desc, R)
+        if dg:
+            return False, f"wajib degree di bidang lain: {dg}", False
     if R.need_english and foreign_text(desc):
         return False, "deskripsi bukan bahasa Inggris/Indonesia (kemungkinan wajib bahasa lokal)", False
     if R.max_years:
@@ -469,11 +541,17 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
         if wa and not pos:
             return False, f"wajib izin kerja sendiri: '{wa[0]}'", False
 
+    verdict = "unknown"
+    if remote and cc in (None, "other"):
+        verdict = R.region_verdict(job.location)
+        if verdict == "blocked":                            # lokasi terstruktur menang atas klaim "worldwide" di deskripsi
+            return False, f"remote tapi wilayah tidak termasuk: '{clean(job.location)[:50]}'", False
     if remote:
         c = R.countries.get(cc) or {}
         if not c.get("remote_ok"):
+            region_ok = verdict == "ok"
             if not (hits(R.ww, text) or (pos and not neg)):
-                if hits(R.restrict, text) or wa or cc == "other":
+                if (hits(R.restrict, text) and not region_ok) or wa or (cc == "other" and not region_ok):
                     return False, "remote tapi tidak worldwide / butuh izin kerja lokal", False
 
     ms = (R.countries.get(cc) or {}).get("min_salary")
@@ -498,6 +576,8 @@ def rule_score(job: Job, R: Rules) -> int:
         s += W["title_weak"]
     s += min(W["skill_max"], W["skill_each"] * len(hits(R.skills, desc)))
     s += min(W["boost_max"], W["boost_each"] * len(hits(R.boost, title + " " + desc)))
+    if R.t_ind:                                             # job di industri targetmu naik, tanpa jejak industri targetmu turun
+        s += W["industry_hit"] if hits(R.t_ind, title + " " + norm(job.company) + " " + desc) else W["industry_none"]
     if hits(R.avoid_title, title):
         s += W["manager_title"]
     mode = R.mode(job.country)
@@ -1086,10 +1166,12 @@ def _arbeitnow(fc, deadline):
             if not it.get("title"):
                 continue
             loc = clean(it.get("location"))
+            url = clean(it.get("url"))
+            de = urlparse(url).netloc.lower().endswith("arbeitnow.com")   # arbeitnow.fr dst. = negara lain
             out.append(Job(source="arbeitnow", title=clean(it["title"]), company=clean(it.get("company_name")) or "?",
-                           location=f"{loc}, Germany" if loc else "Germany", url=clean(it.get("url")),
+                           location=(f"{loc}, Germany" if de else loc) if loc else ("Germany" if de else ""), url=url,
                            description=strip_html(it.get("description")), posted=_epoch(it.get("created_at")),
-                           remote=bool(it.get("remote")), fallback_country="germany"))
+                           remote=bool(it.get("remote")), fallback_country="germany" if de else None))
     return out
 
 
@@ -1128,35 +1210,49 @@ def _adzuna(fc, deadline):
     return out
 
 
-def _jooble(fc, deadline):
+def _jooble(fc, deadline, state=None):
+    """Kuota Jooble kecil (default 500 permintaan) -> hanya beberapa panggilan per run, dirotasi, dengan batas per bulan."""
     jc = fc.get("jooble") or {}
     key = os.getenv("JOOBLE_KEY", "").strip()
     if not jc.get("enabled", True) or not key:
         return None
-    since = (datetime.now(timezone.utc) - timedelta(days=int(jc.get("max_days_old", 3)))).strftime("%Y-%m-%d")
-    out = []
-    for ckey, loc in (jc.get("locations") or {}).items():
-        for q in jc.get("queries") or []:
-            if time.time() > deadline:
-                return out
-            r = http_post(f"https://jooble.org/api/{key}", {"keywords": clean(q), "location": clean(loc), "page": "1",
-                                                            "datecreatedfrom": since})
+    pairs = [(ck, clean(loc), clean(q)) for ck, loc in (jc.get("locations") or {}).items() for q in jc.get("queries") or [] if clean(q)]
+    if not pairs:
+        return []
+    now = datetime.now(timezone.utc)
+    st = state.d.setdefault("jooble", {}) if state is not None else {}
+    if st.get("month") != now.strftime("%Y-%m"):
+        st.update(month=now.strftime("%Y-%m"), calls=0)
+    month_cap, per_run = int(jc.get("max_calls_per_month", 400)), int(jc.get("max_calls_per_run", 4))
+    cursor = int(st.get("cursor", 0)) % len(pairs)
+    since = (now - timedelta(days=int(jc.get("max_days_old", 3)))).strftime("%Y-%m-%d")
+    out, done = [], 0
+    try:
+        for _ in range(min(per_run, len(pairs))):
+            if time.time() > deadline or int(st.get("calls", 0)) >= month_cap:
+                break
+            ckey, loc, q = pairs[(cursor + done) % len(pairs)]
+            done += 1
+            st["calls"] = int(st.get("calls", 0)) + 1
+            r = http_post(f"https://jooble.org/api/{key}", {"keywords": q, "location": loc, "page": "1", "datecreatedfrom": since})
             if r.status_code != 200:
-                raise RuntimeError(f"HTTP {r.status_code} ({loc})")
+                raise RuntimeError(f"HTTP {r.status_code} ({loc}); kuota Jooble terpakai {st['calls']} bulan ini")
             for it in r.json().get("jobs") or []:
                 if not it.get("title"):
                     continue
                 disp = clean(it.get("location"))
                 out.append(Job(source="jooble", title=_tags(it["title"]), company=clean(it.get("company")) or "?",
-                               location=f"{disp}, {clean(loc)}" if disp and norm(clean(loc)) not in norm(disp) else (disp or clean(loc)),
+                               location=f"{disp}, {loc}" if disp and norm(loc) not in norm(disp) else (disp or loc),
                                url=clean(it.get("link")), description=_tags(it.get("snippet")),
                                posted=parse_dt(it.get("updated")), job_type=it.get("type"),
                                fallback_country=str(ckey).lower(),
                                risks=["deskripsi ringkas dari agregator, cek posting aslinya"]))
+    finally:
+        st["cursor"] = (cursor + done) % len(pairs)
     return out
 
 
-def fetch_feeds(cfg: dict, errors: dict, counts: dict) -> list:
+def fetch_feeds(cfg: dict, errors: dict, counts: dict, state=None) -> list:
     fc = cfg.get("feeds") or {}
     if not fc.get("enabled", True):
         return []
@@ -1166,7 +1262,7 @@ def fetch_feeds(cfg: dict, errors: dict, counts: dict) -> list:
     boards = {norm(x) for x in fc.get("boards") or []}
     tasks = [(k, fn) for k, fn in (("remoteok", _remoteok), ("jobicy", _jobicy), ("himalayas", _himalayas),
                                     ("weworkremotely", _wwr), ("arbeitnow", _arbeitnow)) if k in boards]
-    tasks += [("adzuna", _adzuna), ("jooble", _jooble)]
+    tasks += [("adzuna", _adzuna), ("jooble", lambda fc, dl: _jooble(fc, dl, state))]
     now = datetime.now(timezone.utc)
     out = []
     for key, fn in tasks:
@@ -1292,10 +1388,11 @@ def apply_registers(cfg: dict, cands: list, errors: dict) -> list:
         return cands
     bonus, penalty = int(sr.get("bonus", 15)), int(sr.get("penalty", 10))
     strict = {str(x).lower() for x in sr.get("strict_countries") or []}
+    use = {str(x).lower() for x in sr.get("countries") or ["uk"]}      # NL: halaman IND tidak terbaca di GitHub -> default hanya UK
     cache: dict = {}
     out = []
     for j in cands:
-        if j.country not in REGISTERS:
+        if j.country not in REGISTERS or j.country not in use:
             out.append(j)
             continue
         if j.country not in cache:
@@ -1650,7 +1747,7 @@ def run(cfg: dict, dry: bool) -> int:
     comp_jobs = fetch_companies(cfg, errors, counts,                       # cepat, selalu jalan penuh
                                 seen_fn=lambda u: ("u:" + sha(canon_url(u))) in state.seen)
     dead: set = set()                                                      # situs yang error: dilewati sisa run
-    feed_jobs = fetch_feeds(cfg, errors, counts)                           # portal remote + agregator (Adzuna/Jooble bila ada key)
+    feed_jobs = fetch_feeds(cfg, errors, counts, state)                           # portal remote + agregator (Adzuna/Jooble bila ada key)
     bayt_jobs = fetch_bayt(cfg, errors, counts, dead)                      # Saudi/Qatar/Kuwait
     js_jobs, cursor, searched, total = fetch_jobspy(cfg, int(state.d.get("cursor", 0)), errors, counts, dead)
     li_jobs, li_cursor, li_done, li_total = fetch_linkedin(cfg, int(state.d.get("li_cursor", 0)), errors, counts, dead)
