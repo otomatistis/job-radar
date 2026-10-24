@@ -524,7 +524,7 @@ filters:
 sponsorship:
   positive: ["visa sponsorship", "sponsorship available", "sponsorship is available", "sponsorship provided", "we sponsor", "will sponsor", "can sponsor", "able to sponsor", "willing to sponsor", "sponsor visas", "sponsor a visa", "visa support", "visa assistance", "work permit support", "work permit sponsorship", "immigration support", "skilled worker visa", "blue card", "employment pass", "work visa provided", "highly skilled migrant"]
   negative: ["no sponsorship", "no visa sponsorship", "no visa support", "without sponsorship", "unable to sponsor", "unable to offer sponsorship", "unable to provide sponsorship", "cannot sponsor", "can't sponsor", "cannot offer sponsorship", "cannot provide sponsorship", "not able to sponsor", "not able to offer sponsorship", "will not sponsor", "won't sponsor", "do not sponsor", "does not sponsor", "not sponsor", "not offer sponsorship", "do not offer sponsorship", "does not offer sponsorship", "not offer visa", "not provide sponsorship", "not provide visa", "sponsorship is not available", "sponsorship not available", "sponsorship is not offered", "not eligible for sponsorship", "not in a position to sponsor", "not currently sponsor*", "no work permit", "sponsorship will not be provided", "visa sponsorship is not", "not able to provide visa"]
-  work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*"]
+  work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*", "australian citizen*", "new zealand citizen*", "citizen or permanent resident", "permanent resident*", "security clearance", "baseline clearance"]
 
 
 # ═════════ 7. REMOTE ═════════
@@ -539,7 +539,17 @@ remote:
     "czech republic", czechia, slovakia, hungary, romania, bulgaria, greece, croatia, slovenia, serbia, "bosnia and herzegovina", albania, "north macedonia",
     montenegro, kosovo, estonia, latvia, lithuania, malta, cyprus, ukraine, moldova,
     "united states", usa, "u.s.", "u.s.a.", us, america, australia, "new zealand", indonesia, malaysia, japan, "south korea", korea,
-    "saudi arabia", qatar, kuwait]
+    "saudi arabia", qatar, kuwait,
+    alabama, alaska, arizona, arkansas, california, colorado, connecticut, delaware, florida, hawaii, idaho, illinois, indiana, iowa, kansas, kentucky, louisiana, maine, maryland,
+    massachusetts, michigan, minnesota, mississippi, missouri, montana, nebraska, nevada, "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota",
+    ohio, oklahoma, oregon, pennsylvania, "rhode island", "south carolina", "south dakota", tennessee, texas, utah, vermont, virginia, washington, "west virginia", wisconsin, wyoming,
+    "washington dc", "d.c.", seattle, "san francisco", "los angeles", "san diego", austin, boston, chicago, denver, atlanta, dallas, houston, miami, phoenix, philadelphia, portland, nashville, "salt lake city", "east coast", "west coast",
+    sydney, melbourne, brisbane, perth, adelaide, canberra, nsw, queensland, tasmania, auckland, wellington,
+    london, manchester, edinburgh, dublin, cork, berlin, munich, hamburg, paris, madrid, barcelona, lisbon, amsterdam, rotterdam, brussels, zurich, geneva, vienna, stockholm, copenhagen, oslo, helsinki, warsaw, prague, rome, milan, athens,
+    tokyo, osaka, seoul, jakarta, "kuala lumpur", riyadh, jeddah, doha, "kuwait city"]
+  blocked_regions: [africa, nigeria, kenya, ghana, egypt, ethiopia, "south africa", uganda, tanzania, rwanda, senegal, morocco, tunisia, algeria, zimbabwe, zambia, cameroon, "ivory coast",
+    china, india, pakistan, bangladesh, "sri lanka", nepal, philippines, vietnam, thailand, cambodia, myanmar, singapore, "hong kong", taiwan, turkey, israel, iran, iraq,
+    mexico, colombia, brazil, argentina, peru, chile, venezuela, ecuador, "costa rica", panama, "el salvador", nicaragua, guatemala, honduras, bolivia, uruguay, paraguay, "dominican republic", latam, "latin america", canada, uae, "united arab emirates"]
   restrict: ["must be based in", "must be located in", "must reside", "must live in", "residents of", "resident in", "based in the eu", "based in the uk", "based in the us", "us only", "eu only", "uk only", "within the eu", "within the uk"]
 
 
@@ -547,21 +557,22 @@ remote:
 industry:
   # dicek pada JUDUL + NAMA COMPANY
   exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
-      investment*, "asset management", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
+      investment*, "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
       microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
   # HITUNGAN KATA di deskripsi: company bank/asuransi/konstruksi/pharma biasanya menyebut bidangnya berkali-kali walau namanya tidak.
   # Total kemunculan >= min_mentions -> dibuang. Frasa 'benign' dihapus dulu supaya tidak menghitung "bank holiday" dsb.
   min_mentions: 3
   benign_phrases: ["bank holiday*", "bank transfer*", "bank account*", "bank details", "food bank*", "blood bank*", "bank statement*", "data bank*"]
-  count_terms: ["bank*", banking, "financial services", "financial institution*", fintech, lending, lender*, mortgage*, "asset management", "wealth management",
+  count_terms: ["bank*", banking, "financial services", "financial institution*", fintech, lending, lender*, mortgage*, "asset management firm*", "asset management company", "asset managers", "wealth management",
     "private equity", "capital markets", "investment bank*", "investment management", "hedge fund*", brokerage, broker*, "credit card*", "loan*", underwrit*, "financial crime",
     "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*,
+    "law firm*", attorney*, litigation, paralegal*, solicitor*, "legal counsel", "venture capital", investor*, "impact investing", healthcare, "health care", patient*, hospital*, mlr, "promotional review", "life sciences",
     construction*, "civil engineering", "quantity surveyor*", "main contractor*",
     pharmaceutical*, pharma, "clinical trial*", "medical device*", biotech*, biopharma*, "life science*", reagent*, diagnostic*, nhs]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
-  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, cpa, "chartered accountant*", "qualified accountant*",
+  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, "cpa qualif*", "cpa certif*", "cpa licen*", "certified public accountant*", "chartered accountant*", "qualified accountant*",
       "regulatory affairs", pharmacovigilance, "drug safety", "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
-      "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
+      "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
 
 
 # ═════════ 9. PROFIL & SKOR "COCOK" (0-100) ═════════
