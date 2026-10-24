@@ -318,6 +318,7 @@ class Rules:
         self.t_ind = ct((cfg.get("profile") or {}).get("target_industry_terms"))
         self.restrict = ct(rm.get("restrict"))
         self.ind_tc = ct(ind.get("exclude_title_company"))
+        self.ind_co = ct(ind.get("exclude_company"))
         self.ind_desc = ct(ind.get("exclude_description"))
 
         self.target_titles = ct(p.get("target_titles"))
@@ -488,6 +489,9 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     h = hits(R.ind_tc, title + " " + company)
     if h:
         return False, f"industri dihindari: '{h[0]}'", False
+    h = hits(R.ind_co, company)                              # daftar KHUSUS nama company (tidak ikut mengecek judul)
+    if h:
+        return False, f"company di industri dihindari: '{h[0]}'", False
     h = hits(R.ind_desc, desc)
     if h:
         return False, f"industri dihindari (deskripsi): '{h[0]}'", False
