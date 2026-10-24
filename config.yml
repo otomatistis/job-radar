@@ -266,6 +266,18 @@ filters:
 
   # Judul yang dibuang: senior/direktur, teknis murni, magang, part-time, dll.
   title_exclude_any:
+    - sales*
+    - "account executive*"
+    - "account development*"
+    - "business development representative*"
+    - bdr
+    - sdr
+    - telesales
+    - "inside sales"
+    - "territory manager*"
+    - female*
+    - women
+    - ladies
     - director*
     - head of
     - vp
@@ -361,6 +373,15 @@ filters:
 
   # Frasa di deskripsi yang membuang job (frasa spesifik, supaya "unpaid leave" / "volunteer days" sebagai benefit tidak ikut kena)
   exclude_any:
+    - "female only"
+    - "females only"
+    - "women only"
+    - "ladies only"
+    - "only female*"
+    - "must be female"
+    - "female candidates only"
+    - "female applicants only"
+    - "for women only"
     - voluntary position
     - voluntary role
     - volunteer position
@@ -522,6 +543,10 @@ filters:
 # Di negara dengan sponsor: required -> job yang cocok "negative" dibuang; job yang minta izin kerja sendiri ("work_auth")
 # tanpa menyebut sponsor juga dibuang. "positive" memberi nilai plus.
 sponsorship:
+  # true = di negara yang WAJIB sponsor (UK, Australia, Malaysia, Gulf, dst.) hanya job yang MENYEBUT sponsor (atau company terdaftar
+  # di daftar sponsor resmi UK) yang dikirim. false = job tanpa sebutan sponsor tetap dikirim dengan penalti skor.
+  require_explicit: true
+  explicit_exempt: [saudi_arabia, qatar, kuwait]          # Gulf dikecualikan: employer Gulf jarang menulis "sponsor" walau memang mensponsori. Daftar negara yang dikecualikan dari aturan di atas, mis. [saudi_arabia, qatar, kuwait] (employer Gulf jarang menulis "sponsor" walau memang mensponsori)
   positive: ["visa sponsorship", "sponsorship available", "sponsorship is available", "sponsorship provided", "we sponsor", "will sponsor", "can sponsor", "able to sponsor", "willing to sponsor", "sponsor visas", "sponsor a visa", "visa support", "visa assistance", "work permit support", "work permit sponsorship", "immigration support", "skilled worker visa", "blue card", "employment pass", "work visa provided", "highly skilled migrant"]
   negative: ["no sponsorship", "no visa sponsorship", "no visa support", "without sponsorship", "unable to sponsor", "unable to offer sponsorship", "unable to provide sponsorship", "cannot sponsor", "can't sponsor", "cannot offer sponsorship", "cannot provide sponsorship", "not able to sponsor", "not able to offer sponsorship", "will not sponsor", "won't sponsor", "do not sponsor", "does not sponsor", "not sponsor", "not offer sponsorship", "do not offer sponsorship", "does not offer sponsorship", "not offer visa", "not provide sponsorship", "not provide visa", "sponsorship is not available", "sponsorship not available", "sponsorship is not offered", "not eligible for sponsorship", "not in a position to sponsor", "not currently sponsor*", "no work permit", "sponsorship will not be provided", "visa sponsorship is not", "not able to provide visa"]
   work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*", "australian citizen*", "new zealand citizen*", "citizen or permanent resident", "permanent resident*", "security clearance", "baseline clearance"]
@@ -568,7 +593,7 @@ industry:
   benign_phrases: ["bank holiday*", "bank transfer*", "bank account*", "bank details", "food bank*", "blood bank*", "bank statement*", "data bank*"]
   count_terms: ["bank*", banking, "financial services", "financial institution*", fintech, lending, lender*, mortgage*, "asset management firm*", "asset management company", "asset managers", "wealth management",
     "private equity", "capital markets", "investment bank*", "investment management", "hedge fund*", brokerage, broker*, securities, "credit card*", "loan*", underwrit*, "financial crime",
-    "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*,
+    "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*, saas, "software as a service", "software platform*", "enterprise software", "planning software", "software company", "software solutions",
     homebuilder*, "home builder*", "building materials", "building products", "general contractor*", subcontractor*, "job site*", jobsite*, "residential builder*", "interior finishes", flooring, cabinet*, countertop*, "new home*", "home building", builders, "trade contractor*",
     "law firm*", attorney*, litigation, paralegal*, solicitor*, "legal counsel", "venture capital", investor*, "impact investing", healthcare, "health care", patient*, hospital*, mlr, "promotional review", "life sciences",
     construction*, "civil engineering", "quantity surveyor*", "main contractor*",
