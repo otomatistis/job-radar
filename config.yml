@@ -214,22 +214,25 @@ feeds:
   arbeitnow_pages: 2
 
   # Agregator lokal per negara. OPSIONAL: aktif otomatis kalau secret-nya kamu isi (gratis), kalau tidak diisi dilewati.
-  # Adzuna: ADZUNA_APP_ID + ADZUNA_APP_KEY (developer.adzuna.com) -> UK, NL, DE, AU, NZ, IT, ES, CH
+  # Adzuna: berbayar sejak 2026, TIDAK dipakai (kode tetap ada kalau suatu hari kamu mau berlangganan).
   adzuna:
-    enabled: true
+    enabled: false               # sejak 2026 BERBAYAR (£8/bln setelah 25 panggilan tes) -> dimatikan. Tidak perlu diisi.
     countries: { uk: gb, netherlands: nl, germany: de, australia: au, new_zealand: nz, italy: it, spain: es, switzerland: ch }
     queries: ["operations coordinator", "project officer", "business support"]
     max_days_old: 3
-  # Jooble: JOOBLE_KEY (jooble.org/api/about) -> negara yang tidak ada di Adzuna: Indonesia, Malaysia, Irlandia, Gulf, Nordik, Yunani
+  # Jooble: JOOBLE_KEY (jooble.org/api/about, minta key lewat form) -> semua negara targetmu.
   jooble:
-    enabled: true
-    locations: { indonesia: Indonesia, malaysia: Malaysia, ireland: Ireland, saudi_arabia: "Saudi Arabia", qatar: Qatar, kuwait: Kuwait, norway: Norway, sweden: Sweden, denmark: Denmark, greece: Greece }
-    queries: ["operations coordinator", "project officer", "business support"]
+    enabled: false               # dimatikan (kuota 500 permintaan terlalu kecil)
+    locations: { indonesia: Indonesia, malaysia: Malaysia, ireland: Ireland, uk: "United Kingdom", netherlands: Netherlands, germany: Germany, australia: Australia, new_zealand: "New Zealand", italy: Italy, spain: Spain, switzerland: Switzerland, norway: Norway, sweden: Sweden, denmark: Denmark, greece: Greece, iceland: Iceland, saudi_arabia: "Saudi Arabia", qatar: Qatar, kuwait: Kuwait }
+    queries: ["operations coordinator", "project officer"]
+    # Kuota Jooble default hanya 500 permintaan, jadi radar memakai sedikit per run dan memutar negaranya:
+    max_calls_per_run: 4         # 38 kombinasi (19 negara x 2 query) / 4 = semua negara tersapu tiap ±2,5 hari
+    max_calls_per_month: 400     # berhenti sendiri di angka ini (reset tiap bulan)
     max_days_old: 3
 
 # Bayt (portal Timur Tengah) lewat JobSpy, tanpa key.
 bayt:
-  enabled: true
+  enabled: false                 # dimatikan: Bayt memblokir IP GitHub (HTTP 403). Gulf tetap dicari lewat Indeed.
   countries: { saudi_arabia: "Saudi Arabia", qatar: Qatar, kuwait: Kuwait }
   queries: ["operations coordinator", "project coordinator", "business support", "supply chain coordinator"]
   results_per_search: 20
@@ -240,7 +243,8 @@ bayt:
 # Company ada di daftar -> skor naik + label "terdaftar". UK: tidak ada & deskripsi diam soal sponsor -> skor turun.
 sponsor_register:
   enabled: true
-  bonus: 15
+  countries: [uk]                # NL dimatikan: halaman IND tidak terbaca dari GitHub Actions
+  bonus: 10
   penalty: 10
   strict_countries: []           # isi [uk] untuk MEMBUANG job dari company yang tidak terdaftar (lebih ketat; risiko nama beda)
   # Catatan: daftar Belanda (IND) di webnya hanya tampil sebagian, jadi NL hanya dapat BONUS (tanpa penalti/strict).
@@ -254,7 +258,11 @@ filters:
   require_english_description: true   # deskripsi berbahasa Jerman/Belanda/Prancis/dll dianggap wajib bahasa lokal -> dibuang. Inggris & Indonesia lolos.
 
   # Dibuang bila bahasa ini DIWAJIBKAN ("fluent German", "German-speaking"). "German is a plus/desirable" tetap lolos.
-  blocked_languages: [german, deutsch, dutch, flemish, french, italian, spanish, portuguese, norwegian, swedish, danish, finnish, greek, icelandic, arabic, mandarin, chinese, cantonese, japanese, korean, thai, vietnamese, russian, polish, turkish, hindi, tamil, gaeilge, "irish language"]
+  # Wajib degree di bidang di bawah ini (dan tidak menyebut bidang yang cocok untukmu) -> dibuang. Bidangmu: business/management/international/landscape/agri.
+  degree_blocked_fields: [chemistry, chemical, biology, biological, biochem*, microbiolog*, biotechnolog*, pharmacy, pharmaceutical*, "life science*", "natural science*", "scientific discipline*", "food science*", "food technology",
+    "computer science", "information technology", software, engineering, mathematics, statistics, physics, medicine, medical, nursing, dentistry, "data science", law, legal, accounting, finance, financial, economics, actuarial, "quantitative"]
+  degree_ok_fields: [business, management, international, commerce, "supply chain", operations, logistics, marketing, agri*, horticultur*, landscape, environment*, sustainab*, "social science*", "any discipline", "any field", "any subject", "any degree", "all disciplines", "any relevant"]
+  blocked_languages: [romanian, czech, hungarian, hebrew, persian, farsi, urdu, bengali, bulgarian, croatian, serbian, ukrainian, slovak, swahili, tagalog, catalan, lithuanian, latvian, estonian, german, deutsch, dutch, flemish, french, italian, spanish, portuguese, norwegian, swedish, danish, finnish, greek, icelandic, arabic, mandarin, chinese, cantonese, japanese, korean, thai, vietnamese, russian, polish, turkish, hindi, tamil, gaeilge, "irish language"]
 
   # Judul yang dibuang: senior/direktur, teknis murni, magang, part-time, dll.
   title_exclude_any:
@@ -335,6 +343,18 @@ filters:
     - finance controller
     - management accountant
     - treasury
+    - deposit*
+    - lending
+    - loan*
+    - mortgage*
+    - underwrit*
+    - claims
+    - actuar*
+    - broker*
+    - kyc
+    - aml
+    - "financial crime"
+    - wealth*
     - ledger
     - invoicing
     - billing
@@ -512,6 +532,14 @@ sponsorship:
 # Dibuang kalau tidak worldwide DAN menyebut syarat izin kerja / domisili tertentu.
 remote:
   worldwide: [worldwide, "anywhere in the world", "work from anywhere", "global remote", "location independent", "any location", "all countries", "open to candidates globally", "international candidates"]
+  # Remote HANYA lolos kalau lokasinya worldwide/global ATAU di salah satu wilayah ini (afrika, china, india, pakistan,
+  # bangladesh, amerika latin, dst. otomatis ditolak). Untuk onsite/hybrid tetap hanya negara di bagian 'countries'.
+  allowed_regions: [europe, emea, eu, "european union", eea, dach, nordics, benelux, baltics, ireland, "united kingdom", uk, england, scotland, wales, "northern ireland",
+    france, germany, spain, italy, portugal, netherlands, belgium, luxembourg, switzerland, austria, denmark, sweden, norway, finland, iceland, poland,
+    "czech republic", czechia, slovakia, hungary, romania, bulgaria, greece, croatia, slovenia, serbia, "bosnia and herzegovina", albania, "north macedonia",
+    montenegro, kosovo, estonia, latvia, lithuania, malta, cyprus, ukraine, moldova,
+    "united states", usa, "u.s.", "u.s.a.", us, america, australia, "new zealand", indonesia, malaysia, japan, "south korea", korea,
+    "saudi arabia", qatar, kuwait]
   restrict: ["must be based in", "must be located in", "must reside", "must live in", "residents of", "resident in", "based in the eu", "based in the uk", "based in the us", "us only", "eu only", "uk only", "within the eu", "within the uk"]
 
 
@@ -521,9 +549,18 @@ industry:
   exclude_title_company: [bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
       investment*, "asset management", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
       microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
+  # HITUNGAN KATA di deskripsi: company bank/asuransi/konstruksi/pharma biasanya menyebut bidangnya berkali-kali walau namanya tidak.
+  # Total kemunculan >= min_mentions -> dibuang. Frasa 'benign' dihapus dulu supaya tidak menghitung "bank holiday" dsb.
+  min_mentions: 3
+  benign_phrases: ["bank holiday*", "bank transfer*", "bank account*", "bank details", "food bank*", "blood bank*", "bank statement*", "data bank*"]
+  count_terms: ["bank*", banking, "financial services", "financial institution*", fintech, lending, lender*, mortgage*, "asset management", "wealth management",
+    "private equity", "capital markets", "investment bank*", "investment management", "hedge fund*", brokerage, broker*, "credit card*", "loan*", underwrit*, "financial crime",
+    "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*,
+    construction*, "civil engineering", "quantity surveyor*", "main contractor*",
+    pharmaceutical*, pharma, "clinical trial*", "medical device*", biotech*, biopharma*, "life science*", reagent*, diagnostic*, nhs]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
   exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, cpa, "chartered accountant*", "qualified accountant*",
-      "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
+      "regulatory affairs", pharmacovigilance, "drug safety", "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
       "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
 
 
@@ -555,6 +592,10 @@ profile:
   weak_titles: [associate, officer, coordinator, planner, operative, operations, operation, production, manufacturing, assistant, analyst, project, support, specialist]
   avoid_title_soft: [manager, "team lead", supervisor]       # kurangi poin (bukan dibuang)
   skills: [erp, mes, excel, "power bi", haccp, "fssc 22000", gmp, "quality control", "quality assurance", "root cause", "inventory*", "stock", "sop*", "non-conformance*", "production planning", "data validation", reporting, documentation, "project coordination", "process improvement", "supply chain", "cold chain", "market research", "generative ai", "llm*", "annotation", "ai evaluation", "stakeholder*", "cross-functional", clickup, notion, "google workspace", procurement, logistics, horticulture, agriculture, greenhouse, nursery, hydroponic*, "food safety", b2b, negotiation, consulting, strategy, "food manufacturing", fmcg]
+  # Industri targetmu: ada jejaknya di judul/company/deskripsi -> skor naik; tidak ada sama sekali -> skor turun.
+  target_industry_terms: [fmcg, "consumer goods", food, "food manufacturing", "food safety", haccp, agri*, agronom*, horticultur*, nursery, greenhouse, hydroponic*, farm*,
+    "fresh produce", retail*, wholesale*, grocery, supermarket*, "supply chain", logistics, procurement, "cold chain", distribution, manufacturing, sustainab*, esg,
+    "circular economy", consulting, consultancy, "market research", "market entry", "market access", "international trade", export*, import*]
   boost_any: ["relocation*", "willingness to travel", "willing to travel", "international travel"]
 
 scoring:
