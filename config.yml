@@ -350,10 +350,7 @@ filters:
     - underwrit*
     - claims
     - actuar*
-    - "insurance broker*"
-    - "mortgage broker*"
-    - "broker development*"
-    - "stock broker*"
+    - broker*
     - kyc
     - aml
     - "financial crime"
@@ -560,15 +557,16 @@ remote:
 industry:
   # dicek pada JUDUL + NAMA COMPANY
   exclude_title_company: [capital, "medi-care", medicare, healthcare, "health care", therapeutics, biosciences, "life sciences", bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
-      investment*, "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", "insurance brokerage",
+      investment*, "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
       microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
   # HITUNGAN KATA di deskripsi: company bank/asuransi/konstruksi/pharma biasanya menyebut bidangnya berkali-kali walau namanya tidak.
   # Total kemunculan >= min_mentions -> dibuang. Frasa 'benign' dihapus dulu supaya tidak menghitung "bank holiday" dsb.
   min_mentions: 3
   benign_phrases: ["bank holiday*", "bank transfer*", "bank account*", "bank details", "food bank*", "blood bank*", "bank statement*", "data bank*"]
   count_terms: ["bank*", banking, "financial services", "financial institution*", fintech, lending, lender*, mortgage*, "asset management firm*", "asset management company", "asset managers", "wealth management",
-    "private equity", "capital markets", "investment bank*", "investment management", "hedge fund*", "insurance brokerage", "mortgage broker*", "stock broker*", securities, "credit card*", "loan*", underwrit*, "financial crime",
+    "private equity", "capital markets", "investment bank*", "investment management", "hedge fund*", brokerage, broker*, securities, "credit card*", "loan*", underwrit*, "financial crime",
     "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*,
+    homebuilder*, "home builder*", "building materials", "building products", "general contractor*", subcontractor*, "job site*", jobsite*, "residential builder*", "interior finishes", "trade contractor*",
     "law firm*", attorney*, litigation, paralegal*, solicitor*, "legal counsel", "venture capital", investor*, "impact investing", healthcare, "health care", patient*, hospital*, mlr, "promotional review", "life sciences",
     construction*, "civil engineering", "quantity surveyor*", "main contractor*",
     pharmaceutical*, pharma, "clinical trial*", "medical device*", biotech*, biopharma*, "life science*", reagent*, diagnostic*, nhs]
