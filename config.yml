@@ -165,11 +165,11 @@ extra_searches: []
 # Query LinkedIn dipisah & ringkas (LinkedIn lambat: ±3-7 detik per halaman), dirotasi lintas run.
 linkedin:
   enabled: true
-  max_minutes: 3              # batas waktu listing LinkedIn per run
+  max_minutes: 4              # batas waktu listing LinkedIn per run
   hours_old: 72               # lebih longgar dari Indeed: LinkedIn lambat, tiap kombinasi baru dikunjungi lagi setelah beberapa run
   results_per_search: 25
-  max_descriptions: 25        # batas pengambilan deskripsi per run (tiap job = 1 request ke LinkedIn)
-  queue_hours: 72             # job yang lolos tahap 1 tapi belum sempat diambil deskripsinya masuk antrean, dibuang kalau lebih tua dari ini
+  max_descriptions: 45        # batas pengambilan deskripsi per run (tiap job = 1 request ke LinkedIn)
+  queue_hours: 96             # job yang lolos tahap 1 tapi belum sempat diambil deskripsinya masuk antrean, dibuang kalau lebih tua dari ini
   queries:
     - '("operations coordinator" OR "operations associate" OR "operations analyst" OR "business support" OR "business operations" OR "project coordinator" OR "project officer" OR "supply chain coordinator")'
     - '("business development" OR "market research" OR "market entry" OR "international operations" OR "sustainability coordinator" OR "production planner" OR "AI operations")'
@@ -205,7 +205,7 @@ feeds:
   max_minutes: 3                 # batas waktu total bagian ini per run
   max_age_days: 7
   # Portal remote (tanpa key, API publik). Hapus nama yang tidak mau. Remote hanya lolos kalau worldwide / negara targetmu.
-  boards: [remoteok, jobicy, himalayas, weworkremotely, arbeitnow]
+  boards: [remoteok, jobicy, himalayas, weworkremotely, remotive, arbeitnow]
   skip_seniority: [senior, lead, principal, executive, director, head, vp]
   himalayas_queries: ["operations coordinator", "project coordinator", "project officer", "business support", "virtual assistant", "supply chain", "business development", "market research", "sustainability", "program coordinator"]
   himalayas_pages: 1
@@ -546,7 +546,7 @@ sponsorship:
   # true = di negara yang WAJIB sponsor (UK, Australia, Malaysia, Gulf, dst.) hanya job yang MENYEBUT sponsor (atau company terdaftar
   # di daftar sponsor resmi UK) yang dikirim. false = job tanpa sebutan sponsor tetap dikirim dengan penalti skor.
   require_explicit: true
-  explicit_exempt: [saudi_arabia, qatar, kuwait]          # Gulf dikecualikan: employer Gulf jarang menulis "sponsor" walau memang mensponsori. Daftar negara yang dikecualikan dari aturan di atas, mis. [saudi_arabia, qatar, kuwait] (employer Gulf jarang menulis "sponsor" walau memang mensponsori)
+  explicit_exempt: [saudi_arabia, qatar, kuwait, australia, new_zealand]          # Gulf dikecualikan: employer Gulf jarang menulis "sponsor" walau memang mensponsori. Daftar negara yang dikecualikan dari aturan di atas, mis. [saudi_arabia, qatar, kuwait] (employer Gulf jarang menulis "sponsor" walau memang mensponsori)
   positive: ["visa sponsorship", "sponsorship available", "sponsorship is available", "sponsorship provided", "we sponsor", "will sponsor", "can sponsor", "able to sponsor", "willing to sponsor", "sponsor visas", "sponsor a visa", "visa support", "visa assistance", "work permit support", "work permit sponsorship", "immigration support", "skilled worker visa", "blue card", "employment pass", "work visa provided", "highly skilled migrant"]
   negative: ["no sponsorship", "no visa sponsorship", "no visa support", "without sponsorship", "unable to sponsor", "unable to offer sponsorship", "unable to provide sponsorship", "cannot sponsor", "can't sponsor", "cannot offer sponsorship", "cannot provide sponsorship", "not able to sponsor", "not able to offer sponsorship", "will not sponsor", "won't sponsor", "do not sponsor", "does not sponsor", "not sponsor", "not offer sponsorship", "do not offer sponsorship", "does not offer sponsorship", "not offer visa", "not provide sponsorship", "not provide visa", "sponsorship is not available", "sponsorship not available", "sponsorship is not offered", "not eligible for sponsorship", "not in a position to sponsor", "not currently sponsor*", "no work permit", "sponsorship will not be provided", "visa sponsorship is not", "not able to provide visa"]
   work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*", "australian citizen*", "new zealand citizen*", "citizen or permanent resident", "permanent resident*", "security clearance", "baseline clearance"]
