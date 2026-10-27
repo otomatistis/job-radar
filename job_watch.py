@@ -46,7 +46,7 @@ T0 = time.time()
 DEFAULT_W = dict(
     title_target=40, title_weak=15, skill_each=5, skill_max=25, boost_each=8, boost_max=16,
     manager_title=-10, country_known=5, sponsor_pos_required=20, sponsor_pos_preferred=10,
-    sponsor_unknown_required=-10, industry_hit=10, industry_none=-12,
+    sponsor_unknown_required=-10, industry_hit=10, industry_none=-12, remote_open=15,
 )
 JT_BAD = {"parttime", "internship", "intern", "temporary", "perdiem", "volunteer", "seasonal"}
 SOFT_RX = re.compile(
@@ -307,6 +307,8 @@ class Rules:
         self.sp_pos = ct(sp.get("positive"))
         self.sp_neg = ct(sp.get("negative"))
         self.workauth = ct(sp.get("work_auth"))
+        self.pub_terms = ct(sp.get("public_sector_terms"))
+        self.pub_countries = {str(x).lower() for x in sp.get("public_sector_countries") or []}
         self.ww = ct(rm.get("worldwide"))
         self.rx_allowed = ct(list(rm.get("allowed_regions") or []) + [k.replace("_", " ") for k in self.countries]
                              + [t for c in self.countries.values() for t in (c.get("tokens") or [])])
@@ -592,6 +594,8 @@ def rule_score(job: Job, R: Rules) -> int:
     mode = R.mode(job.country)
     if job.country in R.countries:
         s += W["country_known"]
+    elif is_remote_job(job):                                # remote terbuka (lolos filter wilayah): tanpa visa, jadi tidak boleh kalah dari job onsite yang dapat bonus negara/sponsor
+        s += W["remote_open"]
     if mode == "required":
         s += W["sponsor_pos_required"] if job.sponsor == "disebut" else (
             W["sponsor_unknown_required"] if job.sponsor == "tidak disebut" else 0)
@@ -1796,7 +1800,8 @@ def run(cfg: dict, dry: bool) -> int:
         ok, reason, _retry = hard_filter(j, R, pre=pre)
         if not ok:
             why[re.sub(r"\s+", " ", re.sub(r"[\d,.+]+|'[^']*'", "", reason.split(":")[0])).strip() or reason[:40]] += 1
-            explain.append(f"  ✗ {reason:<60} {j.title} — {j.company} [{j.country}]")
+            loc = f" @ {clean(j.location)[:40]}" if reason.startswith("lokasi/negara tidak jelas") else ""
+            explain.append(f"  ✗ {reason:<60} {j.title} — {j.company} [{j.country}] <{j.source}>{loc}")
             return False
         if not pre:
             j.score = rule_score(j, R)
@@ -1862,8 +1867,19 @@ def run(cfg: dict, dry: bool) -> int:
                     and not (is_remote_job(j) and (R.countries.get(j.country) or {}).get("remote_ok")))
             if need and not (j.sponsor.startswith("disebut") or j.sponsor.startswith("terdaftar")):
                 why["sponsor tidak disebut (wajib disebut di negara sponsor)"] += 1
-                if len(explain) < 400:
-                    explain.append(f"sponsor tidak disebut (wajib di negara sponsor)   {j.title} — {j.company} [{j.country}]")
+                if len(explain) < 1200:
+                    explain.append(f"  ✗ sponsor tidak disebut (wajib di negara sponsor)              {j.title} — {j.company} [{j.country}] <{j.source}>")
+                continue
+            keep.append(j)
+        cands = keep
+    if R.pub_terms and R.pub_countries:                     # instansi pemerintah/universitas di AU/NZ hampir tidak pernah mensponsori: buang kecuali sponsor disebut
+        keep = []
+        for j in cands:
+            if (j.country in R.pub_countries and not (j.sponsor.startswith("disebut") or j.sponsor.startswith("terdaftar"))
+                    and hits(R.pub_terms, norm(j.company))):
+                why["instansi publik tanpa sponsor (AU/NZ)"] += 1
+                if len(explain) < 1200:
+                    explain.append(f"  ✗ instansi publik tanpa sponsor                                {j.title} — {j.company} [{j.country}] <{j.source}>")
                 continue
             keep.append(j)
         cands = keep
@@ -1890,7 +1906,7 @@ def run(cfg: dict, dry: bool) -> int:
     min_maybe = int(sc.get("min_score_maybe", 0))                       # 0 = tier 'mungkin cocok' mati
     min_ai_maybe = int(sc.get("min_score_ai_maybe", max(0, min_ai - 12)))
     used = fails = 0
-    sendable, maybe, low_ai = [], [], []
+    sendable, maybe, low_ai, below = [], [], [], []
     for j in cands:
         use_ai = bool(gem and gem.alive)
         if use_ai and j.score < gate:
@@ -1918,8 +1934,11 @@ def run(cfg: dict, dry: bool) -> int:
             maybe.append(j)
         elif j.scored_by == "ai":
             low_ai.append(j)
+        else:
+            below.append(j)                                  # lolos filter keras tapi skor di bawah ambang (hanya untuk laporan dry-run)
     sendable.sort(key=lambda x: -x.score)
     maybe.sort(key=lambda x: -x.score)
+    below.sort(key=lambda x: -x.score)
 
     # ---- dry-run: laporkan saja
     if dry:
@@ -1932,8 +1951,11 @@ def run(cfg: dict, dry: bool) -> int:
             print(f"  ✓ {j.score:>3}  {j.title} — {j.company} [{j.country}] sponsor={j.sponsor or '-'} {j.matched}")
         for j in maybe:
             print(f"  ? {j.score:>3}  {j.title} — {j.company} [{j.country}] sponsor={j.sponsor or '-'}")
+        print(f"\n--- lolos filter keras tapi skor di bawah ambang 'mungkin' ({len(below)}); tampil maks 60, skor tertinggi dulu ---")
+        for j in below[:60]:
+            print(f"  · {j.score:>3}  {j.title} — {j.company} [{j.country}] <{j.source}>{' remote' if is_remote_job(j) else ''} sponsor={j.sponsor or '-'}")
         print("\n--- alasan gugur ---")
-        print("\n".join(explain[:300]) or "  (tidak ada)")
+        print("\n".join(explain[:1200]) or "  (tidak ada)")
         for k, v in errors.items():
             print(f"[error] {k}: {v}")
         return 0
