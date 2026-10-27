@@ -351,6 +351,23 @@ class Rules:
                 return k
         return None
 
+    def country_from_text(self, text: str):
+        """Cadangan bila lokasi tidak memuat negara (mis. 'Houten' dari Arbeitnow): negara yang paling sering disebut di teks,
+        hanya bila >=2 sebutan dan lebih dari 2x negara runner-up (kantor multinegara -> tetap 'tidak jelas'). Token 2 huruf diabaikan."""
+        t = norm(text)
+        cnt = {}
+        for n, k, rx in self.cidx:
+            if n >= 3:
+                c = len(rx.findall(t))
+                if c:
+                    cnt[k] = cnt.get(k, 0) + c
+        if not cnt:
+            return None
+        top = sorted(cnt.items(), key=lambda kv: -kv[1])
+        if top[0][1] >= 2 and (len(top) == 1 or top[0][1] > 2 * top[1][1]):
+            return top[0][0]
+        return None
+
     def region_verdict(self, loc: str) -> str:
         """Lokasi remote terstruktur dari portal -> 'ww' (worldwide) | 'ok' (wilayah yang diizinkan) | 'blocked' | 'unknown' (tanpa info)."""
         s_ = re.sub(r"^remote[\s:–—\-|/,()]*", "", norm(loc))
@@ -475,6 +492,8 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
 
     remote = is_remote_job(job)
     cc = R.country_of(job.location) or job.fallback_country
+    if cc is None and not remote:                           # lokasi hanya nama kota kecil: tebak dari teks (butuh >=2 sebutan dominan)
+        cc = R.country_from_text(job.location + " " + title + " " + desc[:6000])
     job.country = cc
     if cc == "other" and not remote:
         return False, "negara di luar daftar", False
