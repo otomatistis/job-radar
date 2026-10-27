@@ -312,7 +312,48 @@ filters:
     - summer
     - co-op
     - engineer*
-    - developer*
+    - "software developer*"
+    - "web developer*"
+    - "full stack developer*"
+    - "fullstack developer*"
+    - "full-stack developer*"
+    - "backend developer*"
+    - "back end developer*"
+    - "back-end developer*"
+    - "frontend developer*"
+    - "front end developer*"
+    - "front-end developer*"
+    - "mobile developer*"
+    - "app developer*"
+    - "application developer*"
+    - "game developer*"
+    - "python developer*"
+    - "java developer*"
+    - ".net developer*"
+    - "react developer*"
+    - "ios developer*"
+    - "android developer*"
+    - "sap developer*"
+    - "abap developer*"
+    - "etl developer*"
+    - "bi developer*"
+    - "data developer*"
+    - "salesforce developer*"
+    - "wordpress developer*"
+    - "shopify developer*"
+    - "database developer*"
+    - "sql developer*"
+    - "api developer*"
+    - "blockchain developer*"
+    - "ai developer*"
+    - "ml developer*"
+    - "firmware developer*"
+    - "embedded developer*"
+    - "systems developer*"
+    - "it developer*"
+    - "developer advocate*"
+    - "developer relations"
+    - "developer experience"
     - programmer*
     - devops
     - data scientist
@@ -590,8 +631,8 @@ industry:
   # dicek pada JUDUL + NAMA COMPANY
   # dicek HANYA pada NAMA COMPANY (judul tidak ikut): perusahaan kesehatan/pharma/medis besar & nama yang jelas bidang dihindari
   exclude_company: [health, healthcare, hospital*, clinic*, surgical, "cardinal health", mckesson, "becton dickinson", bd, pfizer, novartis, roche, sanofi, bayer, merck, gsk, astrazeneca,
-    "johnson & johnson", medtronic, stryker, "thermo fisher", labcorp, iqvia, parexel, syneos, abbott, ppd, "interior logic", homes, builders, contractors]
-  exclude_title_company: [capital, "medi-care", medicare, healthcare, "health care", therapeutics, biosciences, "life sciences", bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, engineering, casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
+    "johnson & johnson", medtronic, stryker, "thermo fisher", labcorp, iqvia, parexel, syneos, abbott, ppd, "interior logic", homes, builders, contractors, edrington]
+  exclude_title_company: [capital, "medi-care", medicare, healthcare, "health care", therapeutics, biosciences, "life sciences", bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, "engineering firm*", "engineering consultanc*", "engineering consultants", casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
       investment*, "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
       microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
   # HITUNGAN KATA di deskripsi: company bank/asuransi/konstruksi/pharma biasanya menyebut bidangnya berkali-kali walau namanya tidak.
@@ -603,12 +644,13 @@ industry:
     "insurance broker*", insurer*, reinsurance, insurtech, "insurance company", "insurance industry", "insurance products", "claims handl*", policyholder*, saas, "software as a service", "software platform*", "enterprise software", "planning software", "software company", "software solutions",
     homebuilder*, "home builder*", "building materials", "building products", "general contractor*", subcontractor*, "job site*", jobsite*, "residential builder*", "interior finishes", flooring, cabinet*, countertop*, "new home*", "home building", builders, "trade contractor*",
     "law firm*", attorney*, litigation, paralegal*, solicitor*, "legal counsel", "venture capital", investor*, "impact investing", healthcare, "health care", patient*, hospital*, mlr, "promotional review", "life sciences",
+    whisky, whiskey, distillery, distilleries, "alcoholic beverage*", "premium spirits", "spirits brand*", cryptocurrenc*, "crypto exchange*", blockchain, "digital asset*",
     construction*, "civil engineering", "quantity surveyor*", "main contractor*",
     pharmaceutical*, pharma, "clinical trial*", "medical device*", biotech*, biopharma*, "life science*", reagent*, diagnostic*, nhs]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
   exclude_description: [casino*, gambling, pork, ndis, "aged care", "disability support", "disability services", "residential care", "community care", "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, "cpa qualif*", "cpa certif*", "cpa licen*", "certified public accountant*", "chartered accountant*", "qualified accountant*",
       "regulatory affairs", pharmacovigilance, "drug safety", "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
-      "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
+      "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management firm*", "asset management company", "asset managers", "wealth management", "hedge fund*", "capital markets", "fund administration"]
 
 
 # ═════════ 9. PROFIL & SKOR "COCOK" (0-100) ═════════
