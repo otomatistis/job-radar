@@ -36,7 +36,7 @@ countries:
     sponsor: none
     remote_ok: true
     min_salary: { amount: 9000000, currency: IDR }
-    tokens: [jakarta, bandung, surabaya, bali, tangerang, bekasi, depok, bogor, semarang, yogyakarta, medan, batam, cikarang, banten, "jawa barat", "jawa timur", "jawa tengah"]
+    tokens: [jakarta, bandung, surabaya, bali, tangerang, bekasi, depok, bogor, semarang, yogyakarta, medan, batam, cikarang, banten, "jawa barat", "jawa timur", "jawa tengah", "dki jakarta", sidoarjo, karawang, purwakarta, serang, cilegon, makassar, palembang, pekanbaru, malang, surakarta, denpasar, balikpapan, "south tangerang", jababeka, cibitung]
     extra_queries:
       - '("management trainee" OR "officer development program" OR "management development program" OR "future leaders program" OR "staff operasional" OR "koordinator operasional" OR "project officer")'
   malaysia:
@@ -45,13 +45,13 @@ countries:
     sponsor: required
     remote_ok: true
     min_salary: { amount: 5000, currency: MYR }
-    tokens: ["kuala lumpur", selangor, penang, johor, "petaling jaya", cyberjaya, putrajaya, "shah alam"]
+    tokens: ["kuala lumpur", selangor, penang, johor, "petaling jaya", cyberjaya, putrajaya, "shah alam", klang, subang, seremban, ipoh, kuching, "kota kinabalu", melaka, malacca, "johor bahru", "negeri sembilan", perak, sabah, sarawak]
   ireland:
     indeed: ireland
     location: Ireland
     sponsor: preferred
     remote_ok: true
-    tokens: [dublin, cork, galway, limerick, waterford, kilkenny, athlone, drogheda, dundalk, sligo, ie]
+    tokens: [dublin, cork, galway, limerick, waterford, kilkenny, athlone, drogheda, dundalk, sligo, ie, kildare, meath, wicklow, mayo, kerry, donegal, tipperary, carlow, laois, offaly, westmeath, louth, cavan, monaghan, wexford, naas, navan, swords, tallaght, leopardstown, citywest, bray, ennis, tralee, killarney, letterkenny]
     extra_queries:
       - '("graduate programme" OR "graduate program" OR "graduate scheme" OR "production operative")'
   uk:
@@ -59,56 +59,56 @@ countries:
     location: United Kingdom
     sponsor: required
     min_salary: { amount: 41700, currency: GBP, period: yearly }   # Skilled Worker umum (sejak 22 Jul 2025). Entry rate 33400 hanya untuk <26 th / lulusan UK. Going rate per jabatan bisa lebih tinggi.
-    tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb]
+    tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb, "greater london", cambridge, oxford, nottingham, sheffield, southampton, leicester, slough, brighton, aberdeen, swansea, coventry, "milton keynes", surrey, kent, essex, hertfordshire, berkshire, hampshire, yorkshire, "west midlands", watford, croydon, luton, guildford, woking, peterborough, cheltenham, swindon, bournemouth, sunderland, wolverhampton, middlesbrough, "newcastle upon tyne"]
   switzerland:
     indeed: switzerland
     location: Switzerland
     sponsor: required
-    tokens: [swiss, zurich, zürich, geneva, basel, bern, lausanne, zug]
+    tokens: [swiss, zurich, zürich, geneva, basel, bern, lausanne, zug, lugano, lucerne, luzern, winterthur, "st. gallen", "st gallen", fribourg, neuchâtel, schaffhausen, chur]
   netherlands:
     indeed: netherlands
     location: Netherlands
     sponsor: required
     min_salary: { amount: 4357, currency: EUR }   # kennismigrant <30 th, bruto/bulan tanpa uang liburan. 30+ th: 5942. Lulusan baru kriteria reduksi: 3122. Cek IND per 1 Jan & 1 Jul.
-    tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven]
+    tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven, nl, nederland, "den haag", breda, tilburg, groningen, almere, nijmegen, arnhem, leiden, haarlem, delft, amersfoort, maastricht, zwolle, "den bosch", "s-hertogenbosch", veldhoven, hoofddorp, schiphol, zaandam, apeldoorn, enschede, venlo, roermond, dordrecht, leeuwarden, alkmaar, "noord-holland", "zuid-holland", "noord-brabant", gelderland, limburg, overijssel, flevoland, drenthe, friesland, zeeland]
   spain:
     indeed: spain
     location: Spain
     sponsor: required
-    tokens: [madrid, barcelona, valencia, seville, malaga]
+    tokens: [madrid, barcelona, valencia, seville, malaga, bilbao, zaragoza, alicante, granada, "las palmas", tenerife, "palma de mallorca", españa]
   italy:
     indeed: italy
     location: Italy
     sponsor: required
-    tokens: [milan, rome, turin, bologna, florence, naples]
+    tokens: [milan, rome, turin, bologna, florence, naples, genoa, genova, verona, padua, padova, bari, palermo, catania, parma, modena, brescia, bergamo, venice, trieste, pisa, lombardy, italia]
   norway:
     indeed: norway
     location: Norway
     sponsor: required
     min_salary: { amount: 545400, currency: NOK, period: yearly }   # skilled worker tanpa kontrak kolektif, level bachelor (master: 624700). Perkiraan, cek UDI.
-    tokens: [oslo, bergen, trondheim, stavanger]
+    tokens: [oslo, bergen, trondheim, stavanger, tromsø, kristiansand, drammen, fredrikstad, ålesund, norge]
   sweden:
     indeed: sweden
     location: Sweden
     sponsor: required
     min_salary: { amount: 34470, currency: SEK }   # 80% median gaji, sejak 16 Jun 2026 (perkiraan, cek Migrationsverket)
-    tokens: [stockholm, gothenburg, malmö, malmo, uppsala]
+    tokens: [stockholm, gothenburg, malmö, malmo, uppsala, linköping, örebro, västerås, lund, helsingborg, norrköping, sverige]
   denmark:
     indeed: denmark
     location: Denmark
     sponsor: required
     min_salary: { amount: 552000, currency: DKK, period: yearly }   # Pay Limit Scheme 2026 (perkiraan, cek nyidanmark.dk)
-    tokens: [copenhagen, aarhus, odense]
+    tokens: [copenhagen, aarhus, odense, aalborg, esbjerg, kolding, roskilde, frederiksberg, danmark]
   germany:
     indeed: germany
     location: Germany
     sponsor: required
-    tokens: [deutschland, berlin, munich, münchen, hamburg, frankfurt, cologne, köln, stuttgart, düsseldorf, dusseldorf]
+    tokens: [deutschland, berlin, munich, münchen, hamburg, frankfurt, cologne, köln, stuttgart, düsseldorf, dusseldorf, dresden, leipzig, hannover, hanover, nuremberg, nürnberg, bonn, essen, dortmund, bremen, karlsruhe, mannheim, freiburg, heidelberg, mainz, wiesbaden, münster, bielefeld, augsburg, potsdam, ulm, erlangen, "baden-württemberg", bavaria, bayern]
   greece:
     indeed: greece
     location: Greece
     sponsor: required
-    tokens: [athens, thessaloniki]
+    tokens: [athens, thessaloniki, patras, heraklion, larissa]
   iceland:                      # Indeed tidak mendukung Iceland -> hanya terbaca lewat company langsung
     sponsor: required
     tokens: [reykjavik, reykjavík]
@@ -117,12 +117,12 @@ countries:
     location: Australia
     sponsor: required
     min_salary: { amount: 79423, currency: AUD, period: yearly }   # Core Skills Income Threshold sejak 1 Jul 2026 (visa 482)
-    tokens: [sydney, melbourne, brisbane, perth, adelaide, canberra]
+    tokens: [sydney, melbourne, brisbane, perth, adelaide, canberra, "new south wales", queensland, "western australia", "south australia", tasmania, "northern territory", "gold coast", wollongong, geelong, hobart, darwin, townsville, cairns, "sunshine coast", launceston, bendigo, ballarat, toowoomba, parramatta, nsw, qld]
   new_zealand:
     indeed: new zealand
     location: New Zealand
     sponsor: required
-    tokens: ["new zealand", auckland, wellington, christchurch]
+    tokens: ["new zealand", auckland, wellington, christchurch, nz, tauranga, dunedin, "palmerston north", napier, queenstown]
   saudi_arabia:
     indeed: saudi arabia
     location: Saudi Arabia
@@ -285,6 +285,10 @@ filters:
     - chief
     - principal
     - general manager
+    - group manager
+    - executive manager
+    - national manager
+    - country manager
     - managing director
     - senior
     - snr
@@ -546,10 +550,13 @@ sponsorship:
   # true = di negara yang WAJIB sponsor (UK, Australia, Malaysia, Gulf, dst.) hanya job yang MENYEBUT sponsor (atau company terdaftar
   # di daftar sponsor resmi UK) yang dikirim. false = job tanpa sebutan sponsor tetap dikirim dengan penalti skor.
   require_explicit: true
+  # Instansi pemerintah/universitas di negara ini hampir tidak pernah mensponsori: dibuang KECUALI teksnya menyebut sponsor. Cocok pada NAMA COMPANY.
+  public_sector_countries: [australia, new_zealand]
+  public_sector_terms: [government, "department of", "ministry of", council, "public service", "state of", "state library", "health service*", tafe, polytechnic, "university of", universit*, "te whatu ora", "te kawanatanga", "nz police", "defence force", "nsw ", "qld "]
   explicit_exempt: [saudi_arabia, qatar, kuwait, australia, new_zealand]          # Gulf dikecualikan: employer Gulf jarang menulis "sponsor" walau memang mensponsori. Daftar negara yang dikecualikan dari aturan di atas, mis. [saudi_arabia, qatar, kuwait] (employer Gulf jarang menulis "sponsor" walau memang mensponsori)
   positive: ["visa sponsorship", "sponsorship available", "sponsorship is available", "sponsorship provided", "we sponsor", "will sponsor", "can sponsor", "able to sponsor", "willing to sponsor", "sponsor visas", "sponsor a visa", "visa support", "visa assistance", "work permit support", "work permit sponsorship", "immigration support", "skilled worker visa", "blue card", "employment pass", "work visa provided", "highly skilled migrant"]
   negative: ["no sponsorship", "no visa sponsorship", "no visa support", "without sponsorship", "unable to sponsor", "unable to offer sponsorship", "unable to provide sponsorship", "cannot sponsor", "can't sponsor", "cannot offer sponsorship", "cannot provide sponsorship", "not able to sponsor", "not able to offer sponsorship", "will not sponsor", "won't sponsor", "do not sponsor", "does not sponsor", "not sponsor", "not offer sponsorship", "do not offer sponsorship", "does not offer sponsorship", "not offer visa", "not provide sponsorship", "not provide visa", "sponsorship is not available", "sponsorship not available", "sponsorship is not offered", "not eligible for sponsorship", "not in a position to sponsor", "not currently sponsor*", "no work permit", "sponsorship will not be provided", "visa sponsorship is not", "not able to provide visa"]
-  work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*", "australian citizen*", "new zealand citizen*", "citizen or permanent resident", "permanent resident*", "security clearance", "baseline clearance"]
+  work_auth: ["right to work", "eligible to work", "authorised to work", "authorized to work", "work authorisation", "work authorization", "legally entitled to work", "legally permitted to work", "legal right to work", "permission to work", "valid work permit", "existing work permit", "valid work visa", "valid visa", "work eligibility", "entitled to work", "must be a citizen", "citizens only", "eu citizen*", "uk citizen*", "us citizen*", "australian citizen*", "new zealand citizen*", "australian citizenship", "new zealand citizenship", "permanent residency", "work rights", "working rights", "right to live and work", "citizen or permanent resident", "permanent resident*", "security clearance", "baseline clearance"]
 
 
 # ═════════ 7. REMOTE ═════════
@@ -559,7 +566,7 @@ remote:
   worldwide: [worldwide, "anywhere in the world", "work from anywhere", "global remote", "location independent", "any location", "all countries", "open to candidates globally", "international candidates"]
   # Remote HANYA lolos kalau lokasinya worldwide/global ATAU di salah satu wilayah ini (afrika, china, india, pakistan,
   # bangladesh, amerika latin, dst. otomatis ditolak). Untuk onsite/hybrid tetap hanya negara di bagian 'countries'.
-  allowed_regions: [europe, emea, eu, "european union", eea, dach, nordics, benelux, baltics, ireland, "united kingdom", uk, england, scotland, wales, "northern ireland",
+  allowed_regions: [europe, european, emea, eu, "european union", eea, dach, nordics, benelux, baltics, ireland, "united kingdom", uk, england, scotland, wales, "northern ireland",
     france, germany, spain, italy, portugal, netherlands, belgium, luxembourg, switzerland, austria, denmark, sweden, norway, finland, iceland, poland,
     "czech republic", czechia, slovakia, hungary, romania, bulgaria, greece, croatia, slovenia, serbia, "bosnia and herzegovina", albania, "north macedonia",
     montenegro, kosovo, estonia, latvia, lithuania, malta, cyprus, ukraine, moldova,
@@ -599,7 +606,7 @@ industry:
     construction*, "civil engineering", "quantity surveyor*", "main contractor*",
     pharmaceutical*, pharma, "clinical trial*", "medical device*", biotech*, biopharma*, "life science*", reagent*, diagnostic*, nhs]
   # dicek pada DESKRIPSI (hanya kata yang kuat)
-  exclude_description: [casino*, gambling, pork, "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, "cpa qualif*", "cpa certif*", "cpa licen*", "certified public accountant*", "chartered accountant*", "qualified accountant*",
+  exclude_description: [casino*, gambling, pork, ndis, "aged care", "disability support", "disability services", "residential care", "community care", "general ledger", "journal entries", "month-end close", "month end close", "bank reconciliation*", "accounting experience", "accounting background", "accounting degree", "accounting qualification*", "bookkeeping experience", acca, cima, "cpa qualif*", "cpa certif*", "cpa licen*", "certified public accountant*", "chartered accountant*", "qualified accountant*",
       "regulatory affairs", pharmacovigilance, "drug safety", "pharmaceutical microbiology", "pharmaceutical industry", "pharmaceutical company", "pharmaceutical manufacturing", "pharmaceutical sector", "microbiology laborator*", "gmp pharmaceutical*",
       "investment bank*", "investment management", "investment firm*", "investment fund*", "investment advis*", "investment operations", "investment portfolio*", "investment banking", "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "hedge fund*", "capital markets", "fund administration"]
 
