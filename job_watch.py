@@ -1138,6 +1138,24 @@ def _himalayas(fc, deadline):
     return out
 
 
+def _remotive(fc, deadline):
+    """Remotive (API publik, 1 permintaan/run = 4/hari sesuai aturan mereka; tiap kartu menautkan ke halaman Remotive)."""
+    r = http_get("https://remotive.com/api/remote-jobs")
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    out = []
+    for it in (r.json().get("jobs") or []):
+        if not it.get("title") or not it.get("url"):
+            continue
+        geo = clean(it.get("candidate_required_location")) or "Worldwide"
+        out.append(Job(source="remotive", title=clean(it["title"]), company=clean(it.get("company_name")) or "?",
+                       location="Remote – " + geo, url=clean(it.get("url")),
+                       description=f"Location: {geo}. " + strip_html(it.get("description")),
+                       posted=parse_dt(it.get("publication_date")), remote=True,
+                       job_type=clean(it.get("job_type")).replace("_", "").replace("-", "") or None))
+    return out
+
+
 def _wwr(fc, deadline):
     out = []
     for slug in fc.get("wwr_feeds") or []:
@@ -1270,7 +1288,7 @@ def fetch_feeds(cfg: dict, errors: dict, counts: dict, state=None) -> list:
     max_age = int(fc.get("max_age_days", 7))
     boards = {norm(x) for x in fc.get("boards") or []}
     tasks = [(k, fn) for k, fn in (("remoteok", _remoteok), ("jobicy", _jobicy), ("himalayas", _himalayas),
-                                    ("weworkremotely", _wwr), ("arbeitnow", _arbeitnow)) if k in boards]
+                                    ("weworkremotely", _wwr), ("remotive", _remotive), ("arbeitnow", _arbeitnow)) if k in boards]
     tasks += [("adzuna", _adzuna), ("jooble", lambda fc, dl: _jooble(fc, dl, state))]
     now = datetime.now(timezone.utc)
     out = []
@@ -1908,6 +1926,7 @@ def run(cfg: dict, dry: bool) -> int:
         print("\n===== DRY-RUN (tidak ada yang dikirim/disimpan) =====")
         print(f"pencarian dijalankan: {searched} dari {total} kombinasi | diambil per sumber: {counts or '-'}")
         print(f"lolos filter keras: {len(cands)} | gugur: {sum(why.values())} {dict(why)}")
+        print(f"lolos per sumber: {dict(Counter(j.source for j in cands))}")
         print(f"akan dikirim (skor aturan >= {min_rules}): {len(sendable)} | 'mungkin cocok' (skor >= {min_maybe or '-'}): {len(maybe)}")
         for j in sendable:
             print(f"  ✓ {j.score:>3}  {j.title} — {j.company} [{j.country}] sponsor={j.sponsor or '-'} {j.matched}")
