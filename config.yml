@@ -59,18 +59,18 @@ countries:
     location: United Kingdom
     sponsor: required
     min_salary: { amount: 41700, currency: GBP, period: yearly }   # Skilled Worker umum (sejak 22 Jul 2025). Entry rate 33400 hanya untuk <26 th / lulusan UK. Going rate per jabatan bisa lebih tinggi.
-    tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb, "greater london", cambridge, oxford, nottingham, sheffield, southampton, leicester, slough, brighton, aberdeen, swansea, coventry, "milton keynes", surrey, kent, essex, hertfordshire, berkshire, hampshire, yorkshire, "west midlands", watford, croydon, luton, guildford, woking, peterborough, cheltenham, swindon, bournemouth, sunderland, wolverhampton, middlesbrough, "newcastle upon tyne"]
+    tokens: ["united kingdom", england, scotland, wales, "northern ireland", london, edinburgh, glasgow, manchester, birmingham, leeds, bristol, belfast, cardiff, liverpool, gb, "greater london", cambridge, oxford, nottingham, sheffield, southampton, leicester, slough, brighton, aberdeen, swansea, coventry, "milton keynes", surrey, kent, essex, hertfordshire, berkshire, hampshire, yorkshire, "west midlands", watford, croydon, luton, guildford, woking, peterborough, cheltenham, swindon, bournemouth, sunderland, wolverhampton, middlesbrough, "newcastle upon tyne", hove, "brighton and hove", worthing, eastbourne, crawley, basingstoke, bracknell, maidenhead, chelmsford, "stoke-on-trent", bradford, huddersfield, blackburn, warrington, telford, gloucester, "milton keynes", "high wycombe", stevenage, harlow, dartford, maidstone, "tunbridge wells", bromley, harrow, uxbridge, hounslow, wembley, "heathrow", "gatwick", "stockport", "salford", "bolton", "wigan", "oldham", "rochdale", "sunderland", "inverness", "dundee", "motherwell", "wrexham"]
   switzerland:
     indeed: switzerland
     location: Switzerland
     sponsor: required
-    tokens: [swiss, zurich, zürich, geneva, basel, bern, lausanne, zug, lugano, lucerne, luzern, winterthur, "st. gallen", "st gallen", fribourg, neuchâtel, schaffhausen, chur]
+    tokens: [swiss, zurich, zürich, geneva, basel, bern, lausanne, zug, lugano, lucerne, luzern, winterthur, "st. gallen", "st gallen", fribourg, neuchâtel, schaffhausen, chur, opfikon, muttenz, nyon, "kloten", "dübendorf", "wallisellen", "rotkreuz", "aarau", "olten", "frauenfeld", "thun", "bienne", "montreux", "vevey", "yverdon", "morges", "meyrin", "carouge", "pratteln", "allschwil", "liestal", "reinach", "münchenstein", "volketswil", "uster", "wetzikon", "rapperswil", "pfäffikon", "küsnacht", "horgen", "thalwil", "schlieren", "dietikon", "regensdorf", "bülach"]
   netherlands:
     indeed: netherlands
     location: Netherlands
     sponsor: required
     min_salary: { amount: 4357, currency: EUR }   # kennismigrant <30 th, bruto/bulan tanpa uang liburan. 30+ th: 5942. Lulusan baru kriteria reduksi: 3122. Cek IND per 1 Jan & 1 Jul.
-    tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven, nl, nederland, "den haag", breda, tilburg, groningen, almere, nijmegen, arnhem, leiden, haarlem, delft, amersfoort, maastricht, zwolle, "den bosch", "s-hertogenbosch", veldhoven, hoofddorp, schiphol, zaandam, apeldoorn, enschede, venlo, roermond, dordrecht, leeuwarden, alkmaar, "noord-holland", "zuid-holland", "noord-brabant", gelderland, limburg, overijssel, flevoland, drenthe, friesland, zeeland]
+    tokens: [holland, amsterdam, rotterdam, utrecht, "the hague", eindhoven, nl, nederland, "den haag", breda, tilburg, groningen, almere, nijmegen, arnhem, leiden, haarlem, delft, amersfoort, maastricht, zwolle, "den bosch", "s-hertogenbosch", veldhoven, hoofddorp, schiphol, zaandam, apeldoorn, enschede, venlo, roermond, dordrecht, leeuwarden, alkmaar, "noord-holland", "zuid-holland", "noord-brabant", gelderland, limburg, overijssel, flevoland, drenthe, friesland, zeeland, houten, weert, uithoorn, ridderkerk, oosterhout, heerenveen, alblasserdam, zaandijk, klundert, dokkum, "nieuw-vennep", nieuwegein, zeist, woerden, gouda, alphen, "alphen aan den rijn", spijkenisse, vlaardingen, schiedam, capelle, zoetermeer, rijswijk, wassenaar, leidschendam, voorburg, delfzijl, emmen, assen, hengelo, almelo, deventer, doetinchem, harderwijk, hilversum, huizen, bussum, naarden, weesp, amstelveen, diemen, purmerend, hoorn, heerhugowaard, "den helder", velsen, ijmuiden, beverwijk, heemskerk, zaanstad, krommenie, wormerveer, lelystad, emmeloord, kampen, meppel, hoogeveen, veenendaal, wageningen, barneveld, culemborg, tiel, zaltbommel, helmond, geldrop, "valkenswaard", "waalre", roosendaal, bergen op zoom, etten-leur, "breda", "waalwijk", "oisterwijk", "boxtel", "veghel", cuijk, venray, sittard, geleen, heerlen, kerkrade, parkstad, vlissingen, middelburg, terneuzen, "ter apel", "bleiswijk", pijnacker, nootdorp, maasdijk, naaldwijk, "westland", "de lier", "honselersdijk", barendrecht, "hendrik-ido-ambacht", zwijndrecht, papendrecht, sliedrecht, gorinchem, dordrecht, "hoogvliet", "maassluis", "hellevoetsluis", "brielle", "oud-beijerland", "hoek van holland"]
   spain:
     indeed: spain
     location: Spain
@@ -265,6 +265,8 @@ filters:
   blocked_languages: [romanian, czech, hungarian, hebrew, persian, farsi, urdu, bengali, bulgarian, croatian, serbian, ukrainian, slovak, swahili, tagalog, catalan, lithuanian, latvian, estonian, german, deutsch, dutch, flemish, french, italian, spanish, portuguese, norwegian, swedish, danish, finnish, greek, icelandic, arabic, mandarin, chinese, cantonese, japanese, korean, thai, vietnamese, russian, polish, turkish, hindi, tamil, gaeilge, "irish language"]
 
   # Judul yang dibuang: senior/direktur, teknis murni, magang, part-time, dll.
+  # frasa ini dihapus dari judul SEBELUM cek title_exclude_any: peran operasional di divisi sales (bukan jualan) tidak ikut kena 'sales*'
+  title_allow_phrases: ["sales operation*", "sales ops", "after-sales", "after sales", "sales support", "sales admin*", "sales planning", "sales coordinator operations"]
   title_exclude_any:
     - sales*
     - "account executive*"
@@ -297,6 +299,7 @@ filters:
     - sr.
     - sr
     - intern
+    - freelance*
     - interns
     - internship*
     - apprentice*
@@ -632,7 +635,7 @@ industry:
   # dicek HANYA pada NAMA COMPANY (judul tidak ikut): perusahaan kesehatan/pharma/medis besar & nama yang jelas bidang dihindari
   exclude_company: [health, healthcare, hospital*, clinic*, surgical, "cardinal health", mckesson, "becton dickinson", bd, pfizer, novartis, roche, sanofi, bayer, merck, gsk, astrazeneca,
     "johnson & johnson", medtronic, stryker, "thermo fisher", labcorp, iqvia, parexel, syneos, abbott, ppd, "interior logic", homes, builders, contractors, edrington]
-  exclude_title_company: [capital, "medi-care", medicare, healthcare, "health care", therapeutics, biosciences, "life sciences", bank*, banking, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, "engineering firm*", "engineering consultanc*", "engineering consultants", casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
+  exclude_title_company: [capital, "medi-care", medicare, healthcare, "health care", therapeutics, biosciences, "life sciences", bank, banks, banking, banker*, financ*, tax, taxation, law, legal, solicitor*, attorney*, lawyer*, medical, pharma*, clinical, insurance, construction*, "engineering firm*", "engineering consultanc*", "engineering consultants", casino*, gambling, betting, bookmaker*, brewery, brewing, distillery, winery, wine, whiskey, whisky, alcohol*, spirits, liquor, beer, accounting, accountancy, accountants, bookkeeping, payroll,
       investment*, "asset management firm*", "asset management company", "asset managers", "wealth management", "private equity", "venture capital", "hedge fund", "fund management", "fund administration", "capital markets", brokerage,
       microbiolog*, biotech*, biopharma*, "life sciences", "life science", pharmaceutical*, laborator*]
   # HITUNGAN KATA di deskripsi: company bank/asuransi/konstruksi/pharma biasanya menyebut bidangnya berkali-kali walau namanya tidak.
