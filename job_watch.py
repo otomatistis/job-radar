@@ -909,6 +909,133 @@ def _ashby(slug: str) -> list:
 ATS = {"greenhouse": _greenhouse, "lever": _lever, "ashby": _ashby}
 
 
+# ── Daftar NAMA company -> otomatis dicari di Greenhouse / SmartRecruiters / Lever / Ashby (hasilnya disimpan di state.json)
+CO_SUFFIX = {"group", "international", "holdings", "holding", "company", "companies", "inc", "ltd", "limited", "plc", "gmbh", "ag", "se", "sa",
+             "nv", "bv", "llc", "corp", "corporation", "indonesia", "global", "foundation", "office", "the"}
+CO_STATS: dict = {}
+
+
+def _alnum(x) -> str:
+    return re.sub(r"[^a-z0-9]", "", norm(x))
+
+
+def company_name_forms(name: str) -> tuple:
+    """-> (slug kandidat, bentuk nama alnum untuk verifikasi). 'Wesfarmers Group' -> wesfarmersgroup, wesfarmers-group, wesfarmers"""
+    base = re.split(r"\s*[/(|]\s*", norm(name))[0].strip()
+    words = re.sub(r"[^a-z0-9]+", " ", base.replace("&", " and ")).split()
+    if not words:
+        return [], []
+    core = list(words)
+    while len(core) > 1 and core[-1] in CO_SUFFIX:
+        core.pop()
+    while len(core) > 1 and core[0] in CO_SUFFIX:
+        core.pop(0)
+    slugs, forms = [], []
+    for ws in (words, core):
+        for cand in ("".join(ws), "-".join(ws)):
+            if len(cand) >= 2 and cand not in slugs:
+                slugs.append(cand)
+        f = "".join(ws)
+        if len(f) >= 3 and f not in forms:
+            forms.append(f)
+    return slugs, forms
+
+
+def _name_matches(found: str, forms: list) -> bool:
+    a = _alnum(found)
+    return bool(a) and any(f in a or (len(a) >= 3 and a in f) for f in forms)
+
+
+def _probe_ats(ats: str, slug: str):
+    """-> (jumlah job, nama company di ATS atau None). NotFound bila slug tidak ada."""
+    if ats == "greenhouse":
+        raw = _greenhouse(slug, with_content=False)
+        return len(raw), (raw[0].company if raw else None)
+    if ats == "lever":
+        return len(_lever(slug)), None
+    if ats == "ashby":
+        return len(_ashby(slug)), None
+    r = http_get(f"https://api.smartrecruiters.com/v1/companies/{quote_plus(slug)}/postings?limit=1")
+    if r.status_code == 404:
+        raise NotFound(slug)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    d = r.json()
+    items = d.get("content") or []
+    if not items:
+        raise NotFound(slug)
+    return int(d.get("totalFound") or len(items)), clean((items[0].get("company") or {}).get("name")) or None
+
+
+def resolve_company(name: str) -> tuple:
+    """-> (hits [[ats, slug], ...], flaky). Slug generik (<5 huruf) di Lever/Ashby tidak dipercaya karena tak ada nama company untuk diverifikasi."""
+    slugs, forms = company_name_forms(name)
+    hits, flaky = [], False
+    for ats in ("greenhouse", "smartrecruiters", "lever", "ashby"):
+        for slug in slugs:
+            try:
+                n, found = _probe_ats(ats, slug)
+            except NotFound:
+                continue
+            except Exception:
+                flaky = True
+                continue
+            if found:
+                ok = _name_matches(found, forms)
+            else:
+                ok = n > 0 and len(slug) >= 5
+            if ok:
+                hits.append([ats, slug])
+                break
+    return hits, flaky
+
+
+def resolve_names(c: dict, state, errors: dict) -> dict:
+    """Cari ATS untuk sejumlah nama per run (sisanya di run berikutnya). -> {ats: [(slug, nama), ...]}"""
+    names = [clean(x) for x in (c.get("names") or []) if clean(x)]
+    CO_STATS.clear()
+    if not names or state is None:
+        return {}
+    cache = state.d.setdefault("co_resolved", {})
+    per_run = int(c.get("resolve_per_run") or 60)
+    retry = int(c.get("resolve_retry_days") or 30) * 86400
+    max_s = int(c.get("resolve_max_seconds") or 150)
+    now = time.time()
+    todo = []
+    for nm in names:
+        e = cache.get(_alnum(nm))
+        if e is None or (not e.get("hits") and now - float(e.get("ts") or 0) > retry):
+            todo.append(nm)
+    batch = todo[:per_run]
+    t0 = time.time()
+    from concurrent.futures import ThreadPoolExecutor
+    done = 0
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for i in range(0, len(batch), 12):
+            if time.time() - t0 > max_s:
+                break
+            chunk = batch[i:i + 12]
+            for nm, (hits, flaky) in zip(chunk, ex.map(resolve_company, chunk)):
+                done += 1
+                if flaky and not hits:
+                    continue                               # error jaringan: jangan dicatat 'tidak ada', coba lagi run depan
+                cache[_alnum(nm)] = {"name": nm, "hits": hits, "ts": now}
+    extra: dict = {}
+    found = none = 0
+    for nm in names:
+        e = cache.get(_alnum(nm))
+        if not e:
+            continue
+        if e.get("hits"):
+            found += 1
+            for ats, slug in e["hits"]:
+                extra.setdefault(ats, []).append((slug, nm))
+        else:
+            none += 1
+    CO_STATS.update(nama=len(names), ketemu_ats=found, tidak_ketemu=none, belum_dicek=len(names) - found - none, dicek_run_ini=done)
+    return extra
+
+
 # ── Workday (API internal yang dipakai halaman career-nya sendiri; tidak resmi, jadi parsing dibuat defensif)
 WD_AGE = re.compile(r"(\d+)\+?\s*days?\s*ago")
 WD_LOCALE = re.compile(r"[a-z]{2}(?:-[A-Za-z]{2})?")
@@ -1002,10 +1129,12 @@ def _workday(url: str, c: dict, seen_fn, budget: dict, title_any: list, max_age:
     return out, len(found)
 
 
-def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list:
+def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None, state=None) -> list:
     c = cfg.get("companies") or {}
     if not c.get("enabled", True):
         return []
+    extra = resolve_names(c, state, errors)                  # {ats: [(slug, nama)]} dari companies.names
+    disp = {(ats, slug): nm for ats, lst in extra.items() for slug, nm in lst}
     title_any = [norm(x) for x in c.get("title_any") or [] if norm(x)]
     max_age = int(c.get("max_age_days") or 0)
     now = datetime.now(timezone.utc)
@@ -1030,7 +1159,7 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list
         counts["workday"] = counts.get("workday", 0) + n
         out.extend(jobs)
     sr_budget = {"details": int(c.get("workday_max_details") or 60)}
-    for slug in c.get("smartrecruiters") or []:
+    for slug in list(dict.fromkeys(list(c.get("smartrecruiters") or []) + [x for x, _ in extra.get("smartrecruiters", [])])):
         slug = clean(slug)
         if not slug:
             continue
@@ -1045,7 +1174,7 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list
         counts["smartrecruiters"] = counts.get("smartrecruiters", 0) + len(jobs)
         out.extend(jobs)
     for ats, fn in ATS.items():
-        for slug in c.get(ats) or []:
+        for slug in list(dict.fromkeys(list(c.get(ats) or []) + [x for x, _ in extra.get(ats, [])])):
             slug = clean(slug)
             if not slug:
                 continue
@@ -1059,6 +1188,8 @@ def fetch_companies(cfg: dict, errors: dict, counts: dict, seen_fn=None) -> list
                 continue
             counts[ats] = counts.get(ats, 0) + len(raw)
             for j in raw:
+                if (ats, slug) in disp and ats != "greenhouse":
+                    j.company = disp[(ats, slug)]            # Lever/Ashby tidak punya nama company: pakai nama dari daftarmu
                 if title_any and not any(x in norm(j.title) for x in title_any):
                     continue
                 if max_age and j.posted and (now - j.posted) > timedelta(days=max_age):
@@ -1803,7 +1934,7 @@ def run(cfg: dict, dry: bool) -> int:
     counts: dict = {}
 
     comp_jobs = fetch_companies(cfg, errors, counts,                       # cepat, selalu jalan penuh
-                                seen_fn=lambda u: ("u:" + sha(canon_url(u))) in state.seen)
+                                seen_fn=lambda u: ("u:" + sha(canon_url(u))) in state.seen, state=state)
     dead: set = set()                                                      # situs yang error: dilewati sisa run
     feed_jobs = fetch_feeds(cfg, errors, counts, state)                           # portal remote + agregator (Adzuna/Jooble bila ada key)
     bayt_jobs = fetch_bayt(cfg, errors, counts, dead)                      # Saudi/Qatar/Kuwait
@@ -1971,6 +2102,8 @@ def run(cfg: dict, dry: bool) -> int:
     if dry:
         print("\n===== DRY-RUN (tidak ada yang dikirim/disimpan) =====")
         print(f"pencarian dijalankan: {searched} dari {total} kombinasi | diambil per sumber: {counts or '-'}")
+        if CO_STATS:
+            print(f"daftar nama company: {CO_STATS}")
         print(f"lolos filter keras: {len(cands)} | gugur: {sum(why.values())} {dict(why)}")
         print(f"lolos per sumber: {dict(Counter(j.source for j in cands))}")
         print(f"akan dikirim (skor aturan >= {min_rules}): {len(sendable)} | 'mungkin cocok' (skor >= {min_maybe or '-'}): {len(maybe)}")
