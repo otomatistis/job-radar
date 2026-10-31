@@ -279,6 +279,7 @@ class Rules:
 
         self.include_any = ct(f.get("include_any"))
         self.title_ex = ct(f.get("title_exclude_any"))
+        self.title_allow = ct(f.get("title_allow_phrases"))          # frasa yang dihapus dari judul SEBELUM cek title_exclude_any (mis. "sales operations")
         self.phrase_ex = ct(f.get("exclude_any"))
         self.unless_soft = ct(f.get("exclude_unless_soft"))
         self.job_ok = {re.sub(r"[^a-z]", "", norm(x)) for x in (f.get("job_types_allowed") or ["fulltime", "contract"])}
@@ -351,7 +352,7 @@ class Rules:
                 return k
         return None
 
-    def country_from_text(self, text: str):
+    def country_from_text(self, text: str, loc: str = ""):
         """Cadangan bila lokasi tidak memuat negara (mis. 'Houten' dari Arbeitnow): negara yang paling sering disebut di teks,
         hanya bila >=2 sebutan dan lebih dari 2x negara runner-up (kantor multinegara -> tetap 'tidak jelas'). Token 2 huruf diabaikan."""
         t = norm(text)
@@ -366,6 +367,8 @@ class Rules:
         top = sorted(cnt.items(), key=lambda kv: -kv[1])
         if top[0][1] >= 2 and (len(top) == 1 or top[0][1] > 2 * top[1][1]):
             return top[0][0]
+        if top[0][1] == 1 and len(top) == 1 and norm(loc).strip():
+            return top[0][0]                                # lokasi ada tapi tak dikenal + teks hanya menyebut SATU negara (sekali): pakai itu
         return None
 
     def region_verdict(self, loc: str) -> str:
@@ -493,7 +496,7 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     remote = is_remote_job(job)
     cc = R.country_of(job.location) or job.fallback_country
     if cc is None and not remote:                           # lokasi hanya nama kota kecil: tebak dari teks (butuh >=2 sebutan dominan)
-        cc = R.country_from_text(job.location + " " + title + " " + desc[:6000])
+        cc = R.country_from_text(job.location + " " + title + " " + desc[:6000], job.location)
     job.country = cc
     if cc == "other" and not remote:
         return False, "negara di luar daftar", False
@@ -504,7 +507,10 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
     if jt and not (jt & R.job_ok) and (jt & JT_BAD):
         return False, f"tipe kerja bukan full-time/contract: {sorted(jt)}", False
 
-    h = hits(R.title_ex, title)
+    title_chk = title
+    for _, rx in R.title_allow:
+        title_chk = rx.sub(" ", title_chk)
+    h = hits(R.title_ex, title_chk)
     if h:
         return False, f"judul tidak cocok: '{h[0]}'", False
     h = hits(R.ind_tc, title + " " + company)
@@ -520,9 +526,11 @@ def hard_filter(job: Job, R: Rules, pre: bool = False):
         d2 = desc
         for rx in R.ind_benign:
             d2 = rx.sub(" ", d2)
-        n_ind = sum(len(rx.findall(d2)) for _, rx in R.ind_cnt)
+        per = [(len(rx.findall(d2)), t) for t, rx in R.ind_cnt]
+        n_ind = sum(n for n, _ in per)
         if n_ind >= R.ind_min:
-            return False, f"industri dihindari (deskripsi: {n_ind} kata kunci bank/asuransi/konstruksi/pharma)", False
+            top = ", ".join(f"{t}×{n}" for n, t in sorted(per, reverse=True)[:3] if n)
+            return False, f"industri dihindari (deskripsi: {n_ind} kata kunci bank/asuransi/konstruksi/pharma: {top})", False
     h = hits(R.phrase_ex, text)
     if h:
         return False, f"exclude: '{h[0]}'", False
