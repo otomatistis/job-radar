@@ -309,6 +309,8 @@ class Rules:
         self.sp_neg = ct(sp.get("negative"))
         self.workauth = ct(sp.get("work_auth"))
         self.pub_terms = ct(sp.get("public_sector_terms"))
+        self.low_terms = ct(sp.get("low_skill_titles"))
+        self.low_countries = {str(x).lower() for x in sp.get("low_skill_countries") or []}
         self.pub_countries = {str(x).lower() for x in sp.get("public_sector_countries") or []}
         self.ww = ct(rm.get("worldwide"))
         self.rx_allowed = ct(list(rm.get("allowed_regions") or []) + [k.replace("_", " ") for k in self.countries]
@@ -968,9 +970,9 @@ def _probe_ats(ats: str, slug: str):
 
 
 def resolve_company(name: str) -> tuple:
-    """-> (hits [[ats, slug], ...], flaky). Slug generik (<5 huruf) di Lever/Ashby tidak dipercaya karena tak ada nama company untuk diverifikasi."""
+    """-> (hits [[ats, slug], ...], flaky, total job). Slug generik (<5 huruf) di Lever/Ashby tidak dipercaya karena tak ada nama company untuk diverifikasi."""
     slugs, forms = company_name_forms(name)
-    hits, flaky = [], False
+    hits, flaky, total = [], False, 0
     for ats in ("greenhouse", "smartrecruiters", "lever", "ashby"):
         for slug in slugs:
             try:
@@ -986,20 +988,21 @@ def resolve_company(name: str) -> tuple:
                 ok = n > 0 and len(slug) >= 5
             if ok:
                 hits.append([ats, slug])
+                total += n
                 break
-    return hits, flaky
+    return hits, flaky, total
 
 
-def resolve_names(c: dict, state, errors: dict) -> dict:
+def resolve_names(c: dict, state, errors: dict, per_run=None, max_s=None) -> dict:
     """Cari ATS untuk sejumlah nama per run (sisanya di run berikutnya). -> {ats: [(slug, nama), ...]}"""
     names = [clean(x) for x in (c.get("names") or []) if clean(x)]
     CO_STATS.clear()
     if not names or state is None:
         return {}
     cache = state.d.setdefault("co_resolved", {})
-    per_run = int(c.get("resolve_per_run") or 60)
+    per_run = per_run or int(c.get("resolve_per_run") or 60)
     retry = int(c.get("resolve_retry_days") or 30) * 86400
-    max_s = int(c.get("resolve_max_seconds") or 150)
+    max_s = max_s or int(c.get("resolve_max_seconds") or 150)
     now = time.time()
     todo = []
     for nm in names:
@@ -1015,11 +1018,11 @@ def resolve_names(c: dict, state, errors: dict) -> dict:
             if time.time() - t0 > max_s:
                 break
             chunk = batch[i:i + 12]
-            for nm, (hits, flaky) in zip(chunk, ex.map(resolve_company, chunk)):
+            for nm, (hits, flaky, total) in zip(chunk, ex.map(resolve_company, chunk)):
                 done += 1
                 if flaky and not hits:
                     continue                               # error jaringan: jangan dicatat 'tidak ada', coba lagi run depan
-                cache[_alnum(nm)] = {"name": nm, "hits": hits, "ts": now}
+                cache[_alnum(nm)] = {"name": nm, "hits": hits, "ts": now, "jobs": total}
     extra: dict = {}
     found = none = 0
     for nm in names:
@@ -1778,8 +1781,10 @@ Description:
 {d}
 
 Score 0-100 how well this job fits the candidate (role fit, seniority vs REAL experience, skill overlap, industry fit, feasibility). Be strict: 80+ only for a clearly strong fit, below 50 for a poor fit. Technical AI/engineering roles are a poor fit. Do not invent facts about the candidate.
-Write reasons and risks in Indonesian, max 12 words each.
-Reply with JSON only: {{"score": <int 0-100>, "verdict": "APPLY" | "MAYBE" | "SKIP", "reasons": [<max 2 strings>], "risks": [<max 2 strings>]}}"""
+BLOCKERS: list in "blockers" every REQUIREMENT of the posting that the candidate clearly does not meet or cannot get: required domain experience the candidate lacks (e.g. export/customs, a specific industry), a required degree field or certification they lack, required years of experience beyond theirs, required language, driving licence, existing work authorisation, security clearance. If there is any blocker the candidate cannot apply successfully: set verdict "SKIP" and score at most 40. Do NOT put such problems in "risks".
+"risks" is only for minor, non-disqualifying cautions. Sponsorship/visa is already screened by other rules: never list visa or sponsorship as a risk or blocker.
+Write reasons, risks and blockers in Indonesian, max 12 words each.
+Reply with JSON only: {{"score": <int 0-100>, "verdict": "APPLY" | "MAYBE" | "SKIP", "reasons": [<max 2 strings>], "risks": [<max 2 strings>], "blockers": [<max 3 strings>]}}"""
 
 
 def parse_ai(text: str) -> dict:
@@ -1794,7 +1799,27 @@ def parse_ai(text: str) -> dict:
         "verdict": verdict if verdict in ("APPLY", "MAYBE", "SKIP") else "MAYBE",
         "reasons": [clean(x)[:140] for x in (d.get("reasons") or [])][:2],
         "risks": [clean(x)[:140] for x in (d.get("risks") or [])][:2],
+        "blockers": [clean(x)[:140] for x in (d.get("blockers") or []) if clean(x)][:3],
     }
+
+
+AI_GAP_TOPIC = re.compile(r"pengalaman|experience|syarat|persyaratan|gelar|degree|sertifik|certif|bahasa|language|lisensi|licen|keahlian|keterampilan|kualifikasi|qualif|latar belakang", re.I)
+AI_GAP_NEG = re.compile(r"terbatas|kurang|belum|tidak (?:memiliki|punya|sesuai|cocok|ada|bisa)|minim|lebih dalam|lebih banyak|lebih lama|spesifik|wajib|diperlukan|dibutuhkan|membutuhkan|memerlukan|butuh|limited|lack|insufficient|required|mandatory|needs?", re.I)
+AI_VISA = re.compile(r"visa|sponsor|izin kerja|work permit|right to work|permit", re.I)
+
+
+def ai_blocker(a: dict, j: Job, R: Rules):
+    """Alasan job TIDAK boleh dikirim walau skor AI tinggi (AI sendiri menyebut batasan). None bila boleh."""
+    if a.get("blockers"):
+        return a["blockers"][0]
+    if a.get("verdict") == "SKIP":
+        return "AI menilai SKIP"
+    for r in a.get("risks") or []:
+        if AI_GAP_TOPIC.search(r) and AI_GAP_NEG.search(r) and not AI_VISA.search(r):
+            return r                                                # 'Pengalaman ekspor masih terbatas', 'Persyaratan gelar spesifik ...'
+        if AI_VISA.search(r) and R.mode(j.country) == "required" and not j.sponsor.startswith("disebut"):
+            return r                                                # AI bilang perlu visa & postingnya tidak menyebut sponsor (terdaftar saja tidak cukup)
+    return None
 
 
 # ───────────────────────────── Telegram ─────────────────────────────
@@ -2041,6 +2066,16 @@ def run(cfg: dict, dry: bool) -> int:
                 continue
             keep.append(j)
         cands = keep
+    if R.low_terms and R.low_countries:                     # UK: visa Skilled Worker wajib jabatan level RQF6; coordinator/assistant/admin dst. umumnya TIDAK bisa disponsori
+        keep = []
+        for j in cands:
+            if j.country in R.low_countries and not j.sponsor.startswith("disebut") and hits(R.low_terms, norm(j.title)):
+                why["jabatan di bawah level visa (tak bisa disponsori)"] += 1
+                if len(explain) < 1200:
+                    explain.append(f"  ✗ jabatan di bawah level visa, sponsor tidak disebut           {j.title} — {j.company} [{j.country}] <{j.source}>")
+                continue
+            keep.append(j)
+        cands = keep
     cands.sort(key=lambda x: -x.score)
     uniq, seen_fp = [], set()                               # job sama di beberapa kota (company+judul+negara) -> satu saja
     for j in cands:
@@ -2064,6 +2099,7 @@ def run(cfg: dict, dry: bool) -> int:
     min_maybe = int(sc.get("min_score_maybe", 0))                       # 0 = tier 'mungkin cocok' mati
     min_ai_maybe = int(sc.get("min_score_ai_maybe", max(0, min_ai - 12)))
     used = fails = 0
+    ai_blocked: list = []
     sendable, maybe, low_ai, below = [], [], [], []
     for j in cands:
         use_ai = bool(gem and gem.alive)
@@ -2075,6 +2111,13 @@ def run(cfg: dict, dry: bool) -> int:
             try:
                 a = parse_ai(gem.ask(build_prompt(j, R)))
                 j.score, j.verdict, j.reasons, j.risks, j.scored_by = a["score"], a["verdict"], a["reasons"], a["risks"], "ai"
+                blk = ai_blocker(a, j, R)
+                if blk:                                              # AI sendiri tahu ada batasan: jangan kirim ke Fadhil
+                    j.score, j.verdict = min(j.score, 39), "SKIP"
+                    j.risks = [blk] + [r for r in j.risks if r != blk]
+                    ai_blocked.append(f"{j.title} — {j.company}: {blk}")
+                elif j.sponsor.startswith("disebut"):
+                    j.risks = [r for r in j.risks if not AI_VISA.search(r)]   # sponsor sudah disebut di posting: catatan visa cuma noise
                 used += 1
                 fails = 0
             except GeminiFatal as e:
@@ -2203,7 +2246,41 @@ def test_telegram(cfg: dict) -> int:
     return 0
 
 
+def find_companies_from_config() -> int:
+    """find-companies TANPA names: cek SEMUA nama di companies.names, simpan hasilnya, kirim laporan ke Telegram."""
+    cfg = load_config()
+    c = cfg.get("companies") or {}
+    tg = make_telegram()
+    state = State()
+    resolve_names(c, state, {}, per_run=100000, max_s=int(c.get("report_max_seconds") or 420))
+    state.save()
+    cache = state.d.get("co_resolved") or {}
+    names = [clean(x) for x in c.get("names") or [] if clean(x)]
+    ok = [cache[_alnum(n)] for n in names if cache.get(_alnum(n), {}).get("hits")]
+    no = [n for n in names if _alnum(n) in cache and not cache[_alnum(n)].get("hits")]
+    pending = [n for n in names if _alnum(n) not in cache]
+    head = (f"📋 <b>Daftar company</b>: {len(names)} nama\n✅ ketemu ATS: {len(ok)} | ❌ tidak ketemu: {len(no)} | ⏳ belum dicek: {len(pending)}\n"
+            f"Total lowongan terbaca dari yang ketemu: {sum(int(e.get('jobs') or 0) for e in ok)}")
+    print(re.sub(r"<[^>]+>", "", head))
+    tg.send(head)
+    lines = [f"✅ {esc(e['name'])} → " + ", ".join(f"{a}:{esc(sl)}" for a, sl in e["hits"]) + f" ({int(e.get('jobs') or 0)} job)" for e in ok]
+    buf = ""
+    for ln in lines:
+        if len(buf) + len(ln) > 3400:
+            tg.send(buf); buf = ""
+        buf += ln + "\n"
+    if buf:
+        tg.send(buf)
+    if no:
+        tg.send("❌ <b>Tidak ketemu di Greenhouse/SmartRecruiters/Lever/Ashby</b> (biasanya Workday/halaman sendiri/NGO):\n" + esc(", ".join(no))[:3500])
+    for ln in lines:
+        print(re.sub(r"<[^>]+>", "", html.unescape(ln)))
+    return 0
+
+
 def find_companies(names: str) -> int:
+    if not names.strip():
+        return find_companies_from_config()
     tg = make_telegram()
     lines = []
     for raw in [n.strip() for n in names.split(",") if n.strip()]:
