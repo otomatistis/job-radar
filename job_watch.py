@@ -404,6 +404,11 @@ def is_remote_job(j: Job) -> bool:
     return bool(j.remote) or "remote" in norm(j.location) or bool(REMOTE_TITLE.search(norm(j.title)))
 
 
+def dedupe_key(j: Job):
+    """Kunci duplikat: company + judul + negara. Job remote yang labelnya beda antar sumber ('other' vs None) = satu kartu."""
+    cc = "remote" if (is_remote_job(j) and j.country in (None, "other")) else j.country
+    return (norm(j.company), norm(j.title), cc)
+
 def blocked_language(title: str, desc: str, R: Rules) -> str:
     text = title + " " + desc
     for lang, (title_rx, rxs) in R.lang.items():
@@ -2079,8 +2084,8 @@ def run(cfg: dict, dry: bool) -> int:
     cands.sort(key=lambda x: -x.score)
     uniq, seen_fp = [], set()                               # job sama di beberapa kota (company+judul+negara) -> satu saja
     for j in cands:
-        fp = (norm(j.company), norm(j.title), j.country)
-        if fp in seen_fp and j.country:
+        fp = dedupe_key(j)
+        if fp in seen_fp and fp[2]:
             if not dry:
                 state.add(j)                                # tandai agar tidak muncul lagi di run berikutnya
             continue
